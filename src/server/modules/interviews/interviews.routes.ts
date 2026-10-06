@@ -1,0 +1,60 @@
+import { Router } from '../../http/router';
+import * as controller from './interviews.controller';
+import { authenticate, authorize } from '../../middleware/auth';
+import { authenticateWorker } from '../../middleware/workerAuth';
+import { validate } from '../../middleware/validate';
+import { ROLES, COMPANY_SIDE_ROLES } from '../../../shared/constants/roles';
+// import { PERMISSIONS } from '../../../shared/constants/permissions';
+// import { requirePermission } from '../../middleware/permission';
+import { PERMISSIONS, VIEW_CANDIDATE_PERMISSIONS } from '../../../shared/constants/permissions';
+import { requirePermission, requireAnyPermission } from '../../middleware/permission';
+import {
+  upsertInterviewConfigSchema,
+  logInterviewEventSchema,
+  submitAnswerSchema,
+} from '../../../shared/schemas/interview.schema';
+
+const router = new Router();
+
+// ─── Worker routes (shared secret, no user JWT) — mounted first and kept
+// entirely separate from the authenticate() middleware below, since the
+// livekit-worker process has no candidate/company credentials. ───
+router.post('/:interviewId/worker/answer', authenticateWorker, validate(submitAnswerSchema), controller.workerSubmitAnswer);
+router.get('/:interviewId/worker/context', authenticateWorker, controller.workerGetContext);
+router.post('/:interviewId/worker/events', authenticateWorker, validate(logInterviewEventSchema), controller.workerLogEvent);
+
+// ─── Browser routes (candidate/company JWT) ───
+router.use(authenticate);
+
+// Company: AI interviewer configuration
+// router.get('/config/:jobId', authorize(ROLES.COMPANY), controller.getConfig);
+// router.patch('/config/:jobId', authorize(ROLES.COMPANY), validate(upsertInterviewConfigSchema), controller.upsertConfig);
+// Build plan P2: owners and recruiters (with the matching permission).
+const configureInterviews = requirePermission(PERMISSIONS.CONFIGURE_INTERVIEWS);
+const reviewCandidates = requirePermission(PERMISSIONS.REVIEW_CANDIDATES);
+// Viewing the config only needs job access (getOwnedJob); changing it needs CONFIGURE_INTERVIEWS.
+router.get('/config/:jobId', authorize(...COMPANY_SIDE_ROLES), controller.getConfig);
+router.patch('/config/:jobId', authorize(...COMPANY_SIDE_ROLES), configureInterviews, validate(upsertInterviewConfigSchema), controller.upsertConfig);
+
+// Company: recruiter view of interviews for a job
+// router.get('/job/:jobId', authorize(ROLES.COMPANY), controller.listForJob);
+// router.get('/job/:jobId', authorize(...COMPANY_SIDE_ROLES), reviewCandidates, controller.listForJob);
+// Reading interview results: VIEW_CANDIDATES or REVIEW_CANDIDATES.
+const viewCandidates = requireAnyPermission(...VIEW_CANDIDATE_PERMISSIONS);
+router.get('/job/:jobId', authorize(...COMPANY_SIDE_ROLES), viewCandidates, controller.listForJob);
+
+// Shared: either the owning candidate or the owning company can read
+// router.get('/:interviewId', authorize(ROLES.CANDIDATE, ROLES.COMPANY), controller.getDetail);
+// router.get('/:interviewId/state', authorize(ROLES.CANDIDATE, ROLES.COMPANY), controller.getState);
+// router.get('/:interviewId', authorize(ROLES.CANDIDATE, ...COMPANY_SIDE_ROLES), reviewCandidates, controller.getDetail);
+// router.get('/:interviewId/state', authorize(ROLES.CANDIDATE, ...COMPANY_SIDE_ROLES), reviewCandidates, controller.getState);
+router.get('/:interviewId', authorize(ROLES.CANDIDATE, ...COMPANY_SIDE_ROLES), viewCandidates, controller.getDetail);
+router.get('/:interviewId/state', authorize(ROLES.CANDIDATE, ...COMPANY_SIDE_ROLES), viewCandidates, controller.getState);
+
+// Candidate: join/run/end their own interview
+router.post('/:interviewId/start', authorize(ROLES.CANDIDATE), controller.start);
+router.post('/:interviewId/answer', authorize(ROLES.CANDIDATE), validate(submitAnswerSchema), controller.submitAnswer);
+router.post('/:interviewId/events', authorize(ROLES.CANDIDATE), validate(logInterviewEventSchema), controller.logEvent);
+router.post('/:interviewId/end', authorize(ROLES.CANDIDATE), controller.end);
+
+export default router;

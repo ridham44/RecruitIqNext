@@ -1,0 +1,135 @@
+export const JOB_STATUS = {
+  DRAFT: 'DRAFT',
+  OPEN: 'OPEN',
+  CLOSED: 'CLOSED',
+} as const;
+
+export const EMPLOYMENT_TYPE = {
+  FULL_TIME: 'FULL_TIME',
+  PART_TIME: 'PART_TIME',
+  CONTRACT: 'CONTRACT',
+  INTERNSHIP: 'INTERNSHIP',
+  FREELANCE: 'FREELANCE',
+} as const;
+
+export const WORK_MODE = {
+  ON_SITE: 'On-site',
+  REMOTE: 'Remote',
+  HYBRID: 'Hybrid',
+};
+
+export const WORK_MODES = ['On-site', 'Remote', 'Hybrid'];
+
+export const JOB_LEVEL = {
+  JUNIOR: 'Junior',
+  MID: 'Mid',
+  SENIOR: 'Senior',
+  LEAD: 'Lead',
+};
+
+export const JOB_LEVELS = ['Junior', 'Mid', 'Senior', 'Lead'];
+
+export const NOTICE_PERIOD_OPTIONS = ['Immediate', '15 days', '30 days', '60 days', '90 days'];
+
+// Future phases may append further values (e.g. OFFERED, HIRED) — never
+// repurpose existing ones.
+export const APPLICATION_STATUS = {
+  APPLIED: 'APPLIED',
+  SCREENING: 'SCREENING',
+  SHORTLISTED: 'SHORTLISTED',
+  REJECTED: 'REJECTED',
+  // Phase 2
+  INTERVIEW_SCHEDULED: 'INTERVIEW_SCHEDULED',
+  INTERVIEW_COMPLETED: 'INTERVIEW_COMPLETED',
+  // Build plan P7 — set only after the interview (final score / submission).
+  QUALIFIED: 'QUALIFIED',
+  NOT_QUALIFIED: 'NOT_QUALIFIED',
+  SUBMITTED_TO_CLIENT: 'SUBMITTED_TO_CLIENT',
+} as const;
+
+export type ApplicationStatusValue = (typeof APPLICATION_STATUS)[keyof typeof APPLICATION_STATUS];
+
+// Build plan P7: decisions made after the interview. Screening (including a
+// forced re-run) must never overwrite these, and candidates see them as
+// INTERVIEW_COMPLETED (see candidateFacingStatus).
+export const POST_INTERVIEW_STATUSES: ApplicationStatusValue[] = [
+  APPLICATION_STATUS.QUALIFIED,
+  APPLICATION_STATUS.NOT_QUALIFIED,
+  APPLICATION_STATUS.SUBMITTED_TO_CLIENT,
+];
+
+export function candidateFacingStatus(status) {
+  return POST_INTERVIEW_STATUSES.includes(status) ? APPLICATION_STATUS.INTERVIEW_COMPLETED : status;
+}
+
+export const SCREENING_STATUS = {
+  PENDING: 'PENDING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+} as const;
+
+// Phase 2
+export const INTERVIEW_SLOT_STATUS = {
+  AVAILABLE: 'AVAILABLE',
+  BOOKED: 'BOOKED',
+  CANCELLED: 'CANCELLED',
+} as const;
+
+export const INTERVIEW_STATUS = {
+  SCHEDULED: 'SCHEDULED',
+  // Phase 3
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+} as const;
+
+// Phase 3 — fixed stage order for the AI interview state machine. The LLM
+// picks question text within a stage and whether a follow-up is warranted;
+// it never controls stage order or count (interviewEngine.service.js).
+export const INTERVIEW_STAGES = [
+  'NOT_STARTED',
+  'INTRODUCTION',
+  'RESUME_QUESTIONS',
+  'BASIC_TECHNICAL',
+  'JOB_SPECIFIC',
+  'SCENARIO',
+  'BEHAVIORAL',
+  'CANDIDATE_QUESTIONS',
+  'END',
+];
+
+// Stages that count toward AiInterviewConfig.questionCount (NOT_STARTED/END
+// ask no questions of their own).
+export const PLANNED_QUESTION_STAGES = INTERVIEW_STAGES.filter((s) => s !== 'NOT_STARTED' && s !== 'END');
+
+export const INTERVIEW_QUESTION_TYPE = {
+  INTRODUCTION: 'INTRODUCTION',
+  CUSTOM: 'CUSTOM',
+  RESUME_BASED: 'RESUME_BASED',
+  TECHNICAL: 'TECHNICAL',
+  JOB_SPECIFIC: 'JOB_SPECIFIC',
+  SCENARIO: 'SCENARIO',
+  FOLLOW_UP: 'FOLLOW_UP',
+  BEHAVIORAL: 'BEHAVIORAL',
+  CANDIDATE_QUESTION: 'CANDIDATE_QUESTION',
+} as const;
+
+export const INTERVIEW_EVENT_TYPE = {
+  CAMERA_ON: 'CAMERA_ON',
+  CAMERA_OFF: 'CAMERA_OFF',
+  MIC_ON: 'MIC_ON',
+  MIC_OFF: 'MIC_OFF',
+  TAB_SWITCH: 'TAB_SWITCH',
+  PAGE_LEFT: 'PAGE_LEFT',
+  FULLSCREEN_EXIT: 'FULLSCREEN_EXIT',
+  CONNECTION_LOST: 'CONNECTION_LOST',
+  CONNECTION_RESTORED: 'CONNECTION_RESTORED',
+  INTERVIEW_STARTED: 'INTERVIEW_STARTED',
+  INTERVIEW_ENDED: 'INTERVIEW_ENDED',
+} as const;
+
+export const INTERVIEW_REPORT_STATUS = {
+  PENDING: 'PENDING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+} as const;

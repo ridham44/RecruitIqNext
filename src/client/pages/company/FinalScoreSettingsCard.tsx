@@ -1,0 +1,128 @@
+'use client';
+
+import { useState } from 'react';
+import { Calculator, Save } from 'lucide-react';
+import { jobsApi } from '../../services/jobs';
+import { submissionsApi } from '../../services/submissions';
+import Card from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
+import { inputClass } from '../../components/ui/FormField';
+import { updateJobSchema } from '../../../shared/schemas/job.schema';
+import { checkForm } from '../../../shared/schemas/common';
+
+// Build plan P7 (§12) — per-job final score: CV match × weight + interview ×
+// weight, and an optional final threshold that marks candidates Qualified /
+// Not qualified. Leaving the threshold empty keeps today's behaviour.
+export default function FinalScoreSettingsCard({ job, onSaved }) {
+  const [form, setForm] = useState({
+    enabled: job.finalThreshold != null,
+    finalThreshold: job.finalThreshold ?? 70,
+    cvPercent: Math.round((job.cvWeight / ((job.cvWeight + job.interviewWeight) || 1)) * 100),
+    autoSubmitToClient: Boolean(job.autoSubmitToClient),
+  });
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const save = async () => {
+    setMessage('');
+    setError('');
+    const cv = Number(form.cvPercent) / 100;
+    const { data, errors }: { data: any; errors: Record<string, string> } = checkForm(updateJobSchema, {
+      finalThreshold: form.enabled ? (form.finalThreshold === '' ? NaN : Number(form.finalThreshold)) : null,
+      cvWeight: Math.round(cv * 100) / 100,
+      interviewWeight: Math.round((1 - cv) * 100) / 100,
+      autoSubmitToClient: form.enabled && form.autoSubmitToClient,
+    });
+    if (errors.finalThreshold && form.finalThreshold === '') errors.finalThreshold = 'Enter a threshold between 0 and 100';
+    setFieldErrors(errors);
+    if (!data) return setError('Please fix the highlighted fields');
+    setSaving(true);
+    try {
+      const { job: updated } = await jobsApi.update(job.id, data);
+      const { rescored } = await submissionsApi.recomputeJob(job.id);
+      setMessage(`Saved. Re-scored ${rescored} interviewed candidate${rescored === 1 ? '' : 's'}.`);
+      onSaved?.(updated);
+    } catch (err) {
+      const fields = err.fields || {};
+      setFieldErrors(fields);
+      setError(Object.keys(fields).length ? 'Please fix the highlighted fields' : err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="mb-6 p-5">
+      <h3 className="mb-1 flex items-center gap-2 font-semibold text-slate-900">
+        <Calculator className="h-4 w-4 text-brand-600" /> Final score
+      </h3>
+      <p className="mb-4 text-sm text-slate-500">After the interview, the CV match and interview score are combined into one final score.</p>
+
+      <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="cvWeight">
+        Weight: CV {form.cvPercent}% · Interview {100 - form.cvPercent}%
+      </label>
+      <input
+        id="cvWeight"
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={form.cvPercent}
+        onChange={(e) => setForm({ ...form, cvPercent: Number(e.target.value) })}
+        className="h-11 w-full accent-brand-600 sm:max-w-md"
+        aria-invalid={fieldErrors.cvWeight || fieldErrors.interviewWeight ? true : undefined}
+      />
+      {(fieldErrors.cvWeight || fieldErrors.interviewWeight) && (
+        <p role="alert" className="mt-1 text-xs text-red-600">{fieldErrors.cvWeight || fieldErrors.interviewWeight}</p>
+      )}
+
+      <label className="mt-3 flex min-h-[44px] items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
+        Mark candidates Qualified / Not qualified using a final threshold
+      </label>
+      {form.enabled && (
+        <div className="mt-2 flex flex-col gap-3 pl-6 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-700">Threshold</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              aria-label="Final threshold"
+              aria-invalid={fieldErrors.finalThreshold ? true : undefined}
+              className={`${inputClass} min-h-[44px] w-24`}
+              value={form.finalThreshold}
+              onChange={(e) => setForm({ ...form, finalThreshold: e.target.value })}
+            />
+            <span className="text-sm text-slate-500">/ 100</span>
+          </div>
+          {fieldErrors.finalThreshold && (
+            <p role="alert" className="text-xs text-red-600 sm:order-last">{fieldErrors.finalThreshold}</p>
+          )}
+          <label className="flex min-h-[44px] items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={form.autoSubmitToClient}
+              onChange={(e) => setForm({ ...form, autoSubmitToClient: e.target.checked })}
+            />
+            Automatically send qualified candidates to the job's Company HR
+          </label>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Button variant="secondary" onClick={save} loading={saving}>
+          <Save className="h-4 w-4" /> Save &amp; recalculate
+        </Button>
+        {message && <span className="text-sm text-emerald-600">{message}</span>}
+      </div>
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      <p className="mt-2 text-xs text-slate-400">
+        Without a threshold, candidates stay "Interview completed" and you decide. Auto-send only works when the job is linked to
+        a Company HR (Company → Department → Company HR).
+      </p>
+    </Card>
+  );
+}

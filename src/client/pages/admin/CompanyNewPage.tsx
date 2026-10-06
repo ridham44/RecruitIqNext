@@ -1,0 +1,49 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import { useNavigate } from '@/client/lib/navigation';
+import { ArrowLeft } from 'lucide-react';
+import { adminApi } from '../../services/admin';
+import Card from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
+import CompanyForm from './CompanyForm';
+import SetupLinkNotice from './SetupLinkNotice';
+
+// Build plan P1 — onboard a Recruitment Company and invite its owner.
+export default function CompanyNewPage() {
+  const navigate = useNavigate();
+  const [result, setResult] = useState(null);
+
+  return (
+    <div className="mx-auto max-w-2xl">
+      <Link href="/admin/companies" className="mb-4 inline-flex min-h-[44px] items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
+        <ArrowLeft className="h-4 w-4" /> Agencies
+      </Link>
+      <h2 className="mb-6 text-xl font-semibold text-slate-900">Add agency</h2>
+
+      {result ? (
+        <div className="space-y-4">
+          <SetupLinkNotice email={result.company.owner?.email} link={result.setupLink} />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link href={`/admin/companies/${result.company.id}`} className="sm:flex-1">
+              <Button className="w-full">View {result.company.name}</Button>
+            </Link>
+            <Button variant="secondary" className="w-full sm:flex-1" onClick={() => setResult(null)}>
+              Add another agency
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Card className="p-4 sm:p-6">
+          <CompanyForm
+            withOwnerEmail
+            submitLabel="Create agency & send invite"
+            onSubmit={async (payload) => setResult(await adminApi.createCompany(payload))}
+            onCancel={() => navigate('/admin/companies')}
+          />
+        </Card>
+      )}
+    </div>
+  );
+}

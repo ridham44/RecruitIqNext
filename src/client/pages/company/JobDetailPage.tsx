@@ -1,0 +1,469 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useNavigate, useParams } from '@/client/lib/navigation';
+import { Pencil, Users, Calendar, XCircle, Save, X, Laptop, IndianRupee, Clock3 } from 'lucide-react';
+import { jobsApi } from '../../services/jobs';
+import Card from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
+import LoadingState from '../../components/ui/LoadingState';
+import ErrorState from '../../components/ui/ErrorState';
+import StatusBadge from '../../components/ui/StatusBadge';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import FormField, { inputClass } from '../../components/ui/FormField';
+import TagInput from '../../components/ui/TagInput';
+import { usePermissions } from '../../hooks/usePermissions';
+import JobRecruitersCard from './JobRecruitersCard';
+import ClientLinkFields, { clientLinkPayload, EMPTY_CLIENT_LINK } from './ClientLinkFields';
+import { updateJobSchema } from '../../../shared/schemas/job.schema';
+import { checkForm } from '../../../shared/schemas/common';
+
+const EMPLOYMENT_TYPES = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'FREELANCE'];
+const WORK_MODES = ['On-site', 'Remote', 'Hybrid'];
+const JOB_LEVELS = ['Junior', 'Mid', 'Senior', 'Lead'];
+const NOTICE_PERIODS = ['Immediate', '15 days', '30 days', '60 days', '90 days'];
+
+// First error for a field, including nested ones like "requiredSkills.2".
+function errorFor(errors, key) {
+  if (errors[key]) return errors[key];
+  const hit = Object.keys(errors).find((p) => p.startsWith(`${key}.`));
+  return hit ? errors[hit] : undefined;
+}
+
+export default function JobDetailPage() {
+  const { can } = usePermissions();
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [job, setJob] = useState(null);
+  const [error, setError] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const fe = (key) => errorFor(fieldErrors, key);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [closing, setClosing] = useState(false);
+
+  // Build plan P3: Client → Department → HR person (company-side endpoint).
+  const [link, setLink] = useState(null);
+  const [clientLink, setClientLink] = useState(EMPTY_CLIENT_LINK);
+
+  const load = () => {
+    setError('');
+    jobsApi
+      .get(id)
+      .then((data) => setJob(data.job))
+      .catch((err) => setError(err.message));
+    jobsApi
+      .getClientLink(id)
+      .then((data) => setLink(data.link))
+      .catch(() => setLink(null));
+  };
+
+  useEffect(load, [id]);
+
+  const startEdit = () => {
+    setForm({
+      title: job.title,
+      description: job.description,
+      workMode: job.workMode || 'On-site',
+      openings: job.openings ?? 1,
+      jobLevel: job.jobLevel || 'Mid',
+      noticePeriod: job.noticePeriod || '30 days',
+      salaryRange: job.salaryRange || '',
+      minimumExperience: job.minimumExperience,
+      maximumExperience: job.maximumExperience ?? '',
+      location: job.location || '',
+      employmentType: job.employmentType || 'FULL_TIME',
+      requiredSkills: job.requiredSkills || [],
+      preferredSkills: job.preferredSkills || [],
+      educationRequirements: job.educationRequirements || [],
+      languagesRequired: job.languagesRequired || [],
+      certifications: job.certifications || [],
+    });
+    setClientLink({
+      clientCompanyId: link?.clientCompany?.id || '',
+      departmentId: link?.department?.id || '',
+      hiringPersonId: link?.hiringPerson?.id || '',
+    });
+    setFieldErrors({});
+    setError('');
+    setEditing(true);
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setError('');
+    const { data, errors } = checkForm(updateJobSchema, {
+      ...form,
+      openings: form.openings === '' ? '' : Number(form.openings),
+      maximumExperience: form.maximumExperience === '' ? null : Number(form.maximumExperience),
+      minimumExperience: form.minimumExperience === '' ? 0 : Number(form.minimumExperience),
+      salaryRange: form.salaryRange?.trim() || null,
+      noticePeriod: form.noticePeriod?.trim() || null,
+      ...clientLinkPayload(clientLink),
+    });
+    setFieldErrors(errors);
+    if (!data) return setError('Please fix the highlighted fields');
+    setSaving(true);
+    try {
+      const { job: updated } = await jobsApi.update(id, data);
+      setJob(updated);
+      jobsApi
+        .getClientLink(id)
+        .then((data) => setLink(data.link))
+        .catch(() => {});
+      setEditing(false);
+    } catch (err) {
+      const fields = err.fields || {};
+      setFieldErrors(fields);
+      setError(Object.keys(fields).length ? 'Please fix the highlighted fields' : err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClose = async () => {
+    setClosing(true);
+    try {
+      const { job: updated } = await jobsApi.close(id);
+      setJob(updated);
+      setConfirmClose(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setClosing(false);
+    }
+  };
+
+  if (error && !job) return <ErrorState message={error} onRetry={load} />;
+  if (!job) return <LoadingState />;
+
+  if (editing) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <h2 className="mb-6 text-xl font-semibold text-slate-900">Edit job</h2>
+        <Card className="p-6">
+          <form onSubmit={handleSave}>
+            <FormField label="Job title" error={fe('title')}>
+              <input required maxLength={200} className={inputClass} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            </FormField>
+
+            <FormField label="Description" error={fe('description')} hint="At least 30 characters">
+              <textarea
+                required
+                minLength={30}
+                maxLength={20000}
+                rows={6}
+                className={inputClass}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </FormField>
+
+            {/* Build plan P3 */}
+            <ClientLinkFields value={clientLink} onChange={setClientLink} initial={{
+              clientCompanyId: link?.clientCompany?.id || '',
+              departmentId: link?.department?.id || '',
+              hiringPersonId: link?.hiringPerson?.id || '',
+            }} />
+            {(fe('clientCompanyId') || fe('departmentId') || fe('hiringPersonId')) && (
+              <p role="alert" className="-mt-2 mb-4 text-xs text-red-600">
+                {fe('clientCompanyId') || fe('departmentId') || fe('hiringPersonId')}
+              </p>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label="Work mode" error={fe('workMode')}>
+                <select className={inputClass} value={form.workMode} onChange={(e) => setForm({ ...form, workMode: e.target.value })}>
+                  {WORK_MODES.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {mode}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+
+              <FormField label="Number of openings (required)" error={fe('openings')}>
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  max={1000}
+                  step={1}
+                  className={inputClass}
+                  value={form.openings}
+                  onChange={(e) => setForm({ ...form, openings: e.target.value })}
+                />
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label="Job level" error={fe('jobLevel')}>
+                <select className={inputClass} value={form.jobLevel} onChange={(e) => setForm({ ...form, jobLevel: e.target.value })}>
+                  {JOB_LEVELS.map((level) => (
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+
+              <FormField label="Notice period" error={fe('noticePeriod')}>
+                <select className={inputClass} value={form.noticePeriod} onChange={(e) => setForm({ ...form, noticePeriod: e.target.value })}>
+                  {NOTICE_PERIODS.map((np) => (
+                    <option key={np} value={np}>
+                      {np}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label="Salary range" error={fe('salaryRange')}>
+                <input
+                  className={inputClass}
+                  value={form.salaryRange}
+                  onChange={(e) => setForm({ ...form, salaryRange: e.target.value })}
+                  placeholder="e.g. ₹6–10 LPA"
+                  maxLength={60}
+                />
+              </FormField>
+
+              <FormField label="Employment type" error={fe('employmentType')}>
+                <select
+                  className={inputClass}
+                  value={form.employmentType}
+                  onChange={(e) => setForm({ ...form, employmentType: e.target.value })}
+                >
+                  {EMPLOYMENT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type.replace('_', ' ')}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label="Minimum experience (years)" error={fe('minimumExperience')}>
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  step={0.5}
+                  className={inputClass}
+                  value={form.minimumExperience}
+                  onChange={(e) => setForm({ ...form, minimumExperience: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Maximum experience (years)" error={fe('maximumExperience')}>
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  step={0.5}
+                  className={inputClass}
+                  value={form.maximumExperience}
+                  onChange={(e) => setForm({ ...form, maximumExperience: e.target.value })}
+                />
+              </FormField>
+            </div>
+
+            <FormField label="Location" error={fe('location')}>
+              <input maxLength={200} className={inputClass} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+            </FormField>
+
+            <FormField label="Required skills" error={fe('requiredSkills')}>
+              <TagInput value={form.requiredSkills} onChange={(v) => setForm({ ...form, requiredSkills: v })} />
+            </FormField>
+
+            <FormField label="Preferred skills" error={fe('preferredSkills')}>
+              <TagInput value={form.preferredSkills} onChange={(v) => setForm({ ...form, preferredSkills: v })} />
+            </FormField>
+
+            <FormField label="Languages required" error={fe('languagesRequired')}>
+              <TagInput value={form.languagesRequired} onChange={(v) => setForm({ ...form, languagesRequired: v })} placeholder="e.g. English, Hindi" />
+            </FormField>
+
+            <FormField label="Certifications" error={fe('certifications')}>
+              <TagInput value={form.certifications} onChange={(v) => setForm({ ...form, certifications: v })} placeholder="e.g. AWS, Azure, PMP" />
+            </FormField>
+
+            <FormField label="Education requirements" error={fe('educationRequirements')}>
+              <TagInput value={form.educationRequirements} onChange={(v) => setForm({ ...form, educationRequirements: v })} />
+            </FormField>
+
+            {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setEditing(false)}>
+                <X className="h-4 w-4" /> Cancel
+              </Button>
+              <Button type="submit" loading={saving}>
+                <Save className="h-4 w-4" /> Save changes
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-semibold text-slate-900">{job.title}</h2>
+            <StatusBadge status={job.status} />
+          </div>
+          <p className="mt-1 text-sm text-slate-500">
+            {job.location || 'Remote'} · {job.employmentType.replace('_', ' ')} · {job.jobLevel || 'Mid'} Level
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+          {/* Build plan P2: Edit / Close job need MANAGE_JOBS */}
+          {can('MANAGE_JOBS') && (
+            <Button variant="secondary" onClick={startEdit} className="w-full sm:w-auto">
+              <Pencil className="h-4 w-4" /> Edit
+            </Button>
+          )}
+          <Link href={`/company/jobs/${id}/applications`} className="contents sm:block">
+            <Button variant="secondary" className="w-full sm:w-auto">
+              <Users className="h-4 w-4" /> Applications
+            </Button>
+          </Link>
+          <Link href={`/company/jobs/${id}/interviews`} className="contents sm:block">
+            <Button variant="secondary" className="w-full sm:w-auto">
+              <Calendar className="h-4 w-4" /> Interviews
+            </Button>
+          </Link>
+          {/* {job.status !== 'CLOSED' && ( */}
+          {job.status !== 'CLOSED' && can('MANAGE_JOBS') && (
+            <Button variant="danger" onClick={() => setConfirmClose(true)} className="w-full sm:w-auto">
+              <XCircle className="h-4 w-4" /> Close job
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Highlights bar */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatChip icon={Laptop} iconBg="bg-blue-50 text-blue-600" label="Work Mode" value={job.workMode || 'On-site'} />
+        <StatChip icon={Users} iconBg="bg-brand-50 text-brand-600" label="Openings" value={job.openings || 1} />
+        <StatChip icon={IndianRupee} iconBg="bg-emerald-50 text-emerald-600" label="Salary Range" value={job.salaryRange || 'Not disclosed'} />
+        <StatChip icon={Clock3} iconBg="bg-amber-50 text-amber-600" label="Notice Period" value={job.noticePeriod || 'Negotiable'} />
+      </div>
+
+      {/* Build plan P3: who this job is for */}
+      {link?.clientCompany && (
+        <Card className="mb-6 p-5">
+          <h3 className="mb-3 text-sm font-semibold text-slate-900">Company</h3>
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="min-w-0">
+              <dt className="text-xs text-slate-500">Company</dt>
+              <dd className="mt-0.5 text-sm">
+                <Link href={`/company/clients/${link.clientCompany.id}`} className="font-medium text-brand-600 hover:underline">
+                  {link.clientCompany.name}
+                </Link>
+              </dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="text-xs text-slate-500">Department</dt>
+              <dd className="mt-0.5 text-sm text-slate-900">{link.department?.name || '—'}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="text-xs text-slate-500">Company HR</dt>
+              <dd className="mt-0.5 break-words text-sm text-slate-900">
+                {link.hiringPerson ? (
+                  <>
+                    {link.hiringPerson.fullName}
+                    <span className="block text-xs text-slate-500">{link.hiringPerson.email}</span>
+                  </>
+                ) : (
+                  '—'
+                )}
+              </dd>
+            </div>
+          </dl>
+        </Card>
+      )}
+
+      <Card className="mb-6 p-5">
+        <h3 className="mb-2 text-sm font-semibold text-slate-900">Description</h3>
+        <p className="whitespace-pre-wrap text-sm text-slate-600">{job.description}</p>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card className="p-5">
+          <h3 className="mb-2 text-sm font-semibold text-slate-900">Experience</h3>
+          <p className="text-sm text-slate-600">
+            {job.minimumExperience}+ years{job.maximumExperience ? ` – up to ${job.maximumExperience} years` : ''}
+          </p>
+        </Card>
+        <Card className="p-5">
+          <h3 className="mb-2 text-sm font-semibold text-slate-900">Education</h3>
+          <p className="text-sm text-slate-600">
+            {job.educationRequirements?.length ? job.educationRequirements.join(', ') : 'No specific requirement'}
+          </p>
+        </Card>
+      </div>
+
+      <Card className="mt-4 p-5">
+        <h3 className="mb-2 text-sm font-semibold text-slate-900">Required skills</h3>
+        <SkillTags skills={job.requiredSkills} />
+
+        <h3 className="mb-2 mt-4 text-sm font-semibold text-slate-900">Preferred skills</h3>
+        <SkillTags skills={job.preferredSkills} tone="slate" />
+
+        <h3 className="mb-2 mt-4 text-sm font-semibold text-slate-900">Languages required</h3>
+        <SkillTags skills={job.languagesRequired} tone="emerald" />
+
+        <h3 className="mb-2 mt-4 text-sm font-semibold text-slate-900">Certifications</h3>
+        <SkillTags skills={job.certifications} tone="amber" />
+      </Card>
+
+      {/* Build plan P2 */}
+      {can('MANAGE_RECRUITERS') && <JobRecruitersCard jobId={id} />}
+
+      <ConfirmDialog
+        open={confirmClose}
+        title="Close this job?"
+        description="Candidates will no longer be able to apply. Existing applications remain visible."
+        confirmLabel="Close job"
+        onConfirm={handleClose}
+        onCancel={() => setConfirmClose(false)}
+        loading={closing}
+      />
+    </div>
+  );
+}
+
+function StatChip({ icon: Icon, iconBg, label, value }) {
+  return (
+    <Card className="p-3.5">
+      <div className={`inline-flex rounded-lg p-1.5 ${iconBg}`}>
+        <Icon className="h-3.5 w-3.5" />
+      </div>
+      <p className="mt-2 text-xs font-medium text-slate-400">{label}</p>
+      <p className="truncate text-sm font-semibold text-slate-800">{value}</p>
+    </Card>
+  );
+}
+
+function SkillTags({ skills, tone = 'brand' }) {
+  if (!skills?.length) return <p className="text-sm text-slate-400">None specified</p>;
+  const cls = tone === 'brand' ? 'bg-brand-50 text-brand-700' : 'bg-slate-100 text-slate-600';
+  return (
+    <div className="flex flex-wrap gap-2">
+      {skills.map((skill) => (
+        <span key={skill} className={`rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}>
+          {skill}
+        </span>
+      ))}
+    </div>
+  );
+}

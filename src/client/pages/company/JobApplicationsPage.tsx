@@ -1,0 +1,816 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useParams, useNavigate } from '@/client/lib/navigation';
+// import { Sparkles, Eye, Users, SlidersHorizontal, X, Save, RefreshCw, ArrowLeft, CalendarCheck, XCircle, UserCheck } from 'lucide-react';
+import { Sparkles, Eye, Users, SlidersHorizontal, X, Save, RefreshCw, ArrowLeft, CalendarCheck, XCircle, UserCheck, Download } from 'lucide-react';
+import { usePermissions } from '../../hooks/usePermissions';
+import { screeningApi } from '../../services/screening';
+import { jobsApi } from '../../services/jobs';
+import { applicationsApi } from '../../services/applications';
+import Card from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
+import LoadingState from '../../components/ui/LoadingState';
+import ErrorState from '../../components/ui/ErrorState';
+import EmptyState from '../../components/ui/EmptyState';
+import StatusBadge from '../../components/ui/StatusBadge';
+import ScoreRing from '../../components/ui/ScoreRing';
+import FinalScoreSettingsCard from './FinalScoreSettingsCard';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { inputClass } from '../../components/ui/FormField';
+import { getApplicationActionState } from '../../utils/applicationActions';
+import { updateJobSchema } from '../../../shared/schemas/job.schema';
+import { bulkUpdateApplicationStatusSchema } from '../../../shared/schemas/application.schema';
+import { checkForm } from '../../../shared/schemas/common';
+
+// "3 shortlisted, 2 skipped (…)" from the bulk endpoint's { updatedCount, skippedCount }.
+function bulkResultMessage(result, status) {
+  const verb = status === 'SHORTLISTED' ? 'shortlisted' : 'rejected';
+  const updated = result?.updatedCount ?? 0;
+  const skipped = result?.skippedCount ?? 0;
+  let msg = `${updated} ${verb}`;
+  if (skipped > 0) msg += `, ${skipped} skipped (already ${verb}, or already in interview or later)`;
+  return msg;
+}
+
+const SCORE_PRESETS = [
+  { key: 'all', label: 'All' },
+  { key: '90', label: '90+' },
+  { key: '80', label: '80+' },
+  { key: '75', label: '75+' },
+  { key: 'below75', label: 'Below 75' },
+  { key: 'custom', label: 'Custom' },
+];
+
+const EXPERIENCE_PRESETS = [
+  { key: 'all', label: 'All' },
+  { key: '0', label: '0+ yrs' },
+  { key: '1', label: '1+ yrs' },
+  { key: '2', label: '2+ yrs' },
+  { key: '3', label: '3+ yrs' },
+];
+
+// const STATUS_OPTIONS = ['APPLIED', 'SCREENING', 'SHORTLISTED', 'REJECTED', 'INTERVIEW_SCHEDULED', 'INTERVIEW_COMPLETED'];
+// Build plan P7: + qualified / not qualified / submitted to client.
+const STATUS_OPTIONS = [
+  'APPLIED',
+  'SCREENING',
+  'SHORTLISTED',
+  'REJECTED',
+  'INTERVIEW_SCHEDULED',
+  'INTERVIEW_COMPLETED',
+  'QUALIFIED',
+  'NOT_QUALIFIED',
+  'SUBMITTED_TO_CLIENT',
+];
+const POST_INTERVIEW = ['QUALIFIED', 'NOT_QUALIFIED', 'SUBMITTED_TO_CLIENT'];
+
+const SORT_OPTIONS = [
+  { key: 'score', label: 'AI Score' },
+  { key: 'experience', label: 'Experience' },
+  { key: 'newest', label: 'Newest' },
+];
+
+const DEFAULT_FILTERS = {
+  scorePreset: 'all',
+  scoreMin: '',
+  scoreMax: '',
+  experience: 'all',
+  skills: [],
+  education: [],
+  statuses: [],
+  sortBy: 'score',
+  top10Only: false,
+};
+
+function getScore(app) {
+  return app.screeningResult?.status === 'COMPLETED' ? app.screeningResult.overallScore : null;
+}
+function getExperience(app) {
+  return app.resume?.parsedData?.totalExperienceYears ?? 0;
+}
+function getDegree(app) {
+  return app.candidate?.degree || app.resume?.parsedData?.degree || '';
+}
+function getSkillPool(app) {
+  const matched = app.screeningResult?.matchedSkills || [];
+  const resumeSkills = app.resume?.parsedData?.skills || [];
+  return new Set([...matched, ...resumeSkills].map((s) => s.toLowerCase()));
+}
+
+function applyFilters(applications, filters) {
+  let list = applications.filter((app) => {
+    const score = getScore(app);
+
+    if (filters.scorePreset !== 'all') {
+      if (score == null) return false;
+      if (filters.scorePreset === '90' && score < 90) return false;
+      if (filters.scorePreset === '80' && score < 80) return false;
+      if (filters.scorePreset === '75' && score < 75) return false;
+      if (filters.scorePreset === 'below75' && score >= 75) return false;
+      if (filters.scorePreset === 'custom') {
+        const min = filters.scoreMin === '' ? -Infinity : Number(filters.scoreMin);
+        const max = filters.scoreMax === '' ? Infinity : Number(filters.scoreMax);
+        if (score < min || score > max) return false;
+      }
+    }
+
+    if (filters.experience !== 'all' && getExperience(app) < Number(filters.experience)) return false;
+
+    if (filters.skills.length > 0) {
+      const pool = getSkillPool(app);
+      if (!filters.skills.every((s) => pool.has(s.toLowerCase()))) return false;
+    }
+
+    if (filters.education.length > 0 && !filters.education.includes(getDegree(app))) return false;
+
+    if (filters.statuses.length > 0 && !filters.statuses.includes(app.status)) return false;
+
+    return true;
+  });
+
+  list = [...list].sort((a, b) => {
+    if (filters.sortBy === 'experience') return getExperience(b) - getExperience(a);
+    if (filters.sortBy === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    return (getScore(b) ?? -1) - (getScore(a) ?? -1);
+  });
+
+  return filters.top10Only ? list.slice(0, 10) : list;
+}
+
+export default function JobApplicationsPage() {
+  const { id: jobId } = useParams();
+  const navigate = useNavigate();
+  const [job, setJob] = useState(null);
+  const [applications, setApplications] = useState(null);
+  const [error, setError] = useState('');
+  const [running, setRunning] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [selected, setSelected] = useState(new Set());
+  const [confirmBulk, setConfirmBulk] = useState(null); // 'SHORTLISTED' | 'REJECTED' | null
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
+  const [confirmRerun, setConfirmRerun] = useState(false);
+  // View-only recruiters (VIEW_CANDIDATES): list, scores and CVs, no actions.
+  const { can } = usePermissions();
+  const canReview = can('REVIEW_CANDIDATES');
+  const downloadCv = (app) =>
+    applicationsApi
+      .openCv(jobId, app.candidate.id, { download: true, fileName: app.resume?.fileName || 'cv' })
+      .catch((err) => setRowError((prev) => ({ ...prev, [app.id]: err.message })));
+  const [rowError, setRowError] = useState<Record<string, string>>({});
+  const [confirmRejectId, setConfirmRejectId] = useState(null);
+  const [rejecting, setRejecting] = useState(false);
+
+  const [settings, setSettings] = useState(null);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [settingsErrors, setSettingsErrors] = useState<Record<string, string>>({});
+  const [bulkMessage, setBulkMessage] = useState('');
+
+  const load = () => {
+    setError('');
+    Promise.all([jobsApi.get(jobId), applicationsApi.listForJob(jobId)])
+      .then(([jobRes, appsRes]) => {
+        setJob(jobRes.job);
+        setSettings({
+          minAcceptableScore: jobRes.job.minAcceptableScore,
+          autoRejectBelowMinScore: jobRes.job.autoRejectBelowMinScore,
+          // Build plan P4
+          autoAdvanceOnMatch: Boolean(jobRes.job.autoAdvanceOnMatch),
+        });
+        setApplications(appsRes.applications);
+        setSelected(new Set());
+      })
+      .catch((err) => setError(err.message));
+  };
+
+  useEffect(load, [jobId]);
+
+  const pendingCount = useMemo(
+    () => (applications || []).filter((a) => a.screeningResult?.status !== 'COMPLETED').length,
+    [applications]
+  );
+
+  // Eligible for a forced re-screen: already scored, but not a manual
+  // SHORTLISTED decision (screening never revisits those — see
+  // screening.service.js).
+  const rerunnableCount = useMemo(
+    // () => (applications || []).filter((a) => a.screeningResult?.status === 'COMPLETED' && a.status !== 'SHORTLISTED').length,
+    // Build plan P7: post-interview decisions are never re-screened either.
+    () =>
+      (applications || []).filter(
+        (a) => a.screeningResult?.status === 'COMPLETED' && a.status !== 'SHORTLISTED' && !POST_INTERVIEW.includes(a.status)
+      ).length,
+    [applications]
+  );
+
+  const screenedNotShortlistedIds = useMemo(
+    () =>
+      (applications || [])
+        // .filter((a) => a.screeningResult?.status === 'COMPLETED' && !['SHORTLISTED', 'REJECTED', 'INTERVIEW_SCHEDULED', 'INTERVIEW_COMPLETED'].includes(a.status))
+        .filter(
+          (a) =>
+            a.screeningResult?.status === 'COMPLETED' &&
+            !['SHORTLISTED', 'REJECTED', 'INTERVIEW_SCHEDULED', 'INTERVIEW_COMPLETED', ...POST_INTERVIEW].includes(a.status)
+        )
+        .map((a) => a.id),
+    [applications]
+  );
+
+  const skillOptions = useMemo(
+    () => Array.from(new Set([...(job?.requiredSkills || []), ...(job?.preferredSkills || [])])),
+    [job]
+  );
+
+  const educationOptions = useMemo(() => {
+    if (!applications) return [];
+    return Array.from(new Set(applications.map(getDegree).filter(Boolean)));
+  }, [applications]);
+
+  const filtered = useMemo(() => (applications ? applyFilters(applications, filters) : []), [applications, filters]);
+
+  const filtersActive =
+    filters.scorePreset !== 'all' ||
+    filters.experience !== 'all' ||
+    filters.skills.length > 0 ||
+    filters.education.length > 0 ||
+    filters.statuses.length > 0 ||
+    filters.top10Only;
+
+  const handleRunScreening = async () => {
+    setRunning(true);
+    setError('');
+    try {
+      await screeningApi.runForJob(jobId);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const handleRerunScreening = async () => {
+    setRerunning(true);
+    setError('');
+    try {
+      await screeningApi.runForJob(jobId, true);
+      setConfirmRerun(false);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRerunning(false);
+    }
+  };
+
+  const handleShortlistAllScreened = async () => {
+    if (screenedNotShortlistedIds.length === 0) return;
+    setError('');
+    setBulkMessage('');
+    const { data, errors }: { data: any; errors: Record<string, string> } = checkForm(bulkUpdateApplicationStatusSchema, { applicationIds: screenedNotShortlistedIds, status: 'SHORTLISTED' });
+    if (!data) return setError(Object.values(errors)[0]);
+    setBulkLoading(true);
+    try {
+      const result = await applicationsApi.bulkUpdateStatus(jobId, data.applicationIds, data.status);
+      setBulkMessage(bulkResultMessage(result, data.status));
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const runRejectOne = async () => {
+    const appId = confirmRejectId;
+    setRejecting(true);
+    setRowError((prev) => ({ ...prev, [appId]: '' }));
+    try {
+      await applicationsApi.reject(appId);
+      setConfirmRejectId(null);
+      load();
+    } catch (err) {
+      setRowError((prev) => ({ ...prev, [appId]: err.message }));
+      setConfirmRejectId(null);
+    } finally {
+      setRejecting(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSettingsSaved(false);
+    setError('');
+    const { data, errors }: { data: any; errors: Record<string, string> } = checkForm(updateJobSchema, {
+      minAcceptableScore: settings.minAcceptableScore === '' ? NaN : Number(settings.minAcceptableScore),
+      autoRejectBelowMinScore: settings.autoRejectBelowMinScore,
+      // Build plan P4
+      autoAdvanceOnMatch: settings.autoAdvanceOnMatch,
+    });
+    if (errors.minAcceptableScore && settings.minAcceptableScore === '') errors.minAcceptableScore = 'Enter a score between 0 and 100';
+    setSettingsErrors(errors);
+    if (!data) return;
+    setSettingsSaving(true);
+    try {
+      const { job: updated } = await jobsApi.update(jobId, data);
+      setJob(updated);
+      setSettingsSaved(true);
+    } catch (err) {
+      const fields = err.fields || {};
+      setSettingsErrors(fields);
+      if (!Object.keys(fields).length) setError(err.message);
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const toggleSelected = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every((a) => selected.has(a.id));
+  const toggleSelectAllVisible = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) filtered.forEach((a) => next.delete(a.id));
+      else filtered.forEach((a) => next.add(a.id));
+      return next;
+    });
+  };
+
+  const runBulkAction = async () => {
+    setError('');
+    setBulkMessage('');
+    const { data, errors }: { data: any; errors: Record<string, string> } = checkForm(bulkUpdateApplicationStatusSchema, { applicationIds: Array.from(selected), status: confirmBulk });
+    if (!data) {
+      setConfirmBulk(null);
+      return setError(Object.values(errors)[0]);
+    }
+    setBulkLoading(true);
+    try {
+      const result = await applicationsApi.bulkUpdateStatus(jobId, data.applicationIds, data.status);
+      setConfirmBulk(null);
+      setBulkMessage(bulkResultMessage(result, data.status));
+      load();
+    } catch (err) {
+      setConfirmBulk(null);
+      setError(err.message);
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const toggleMulti = (key, value) => {
+    setFilters((prev) => ({
+      ...prev,
+      [key]: prev[key].includes(value) ? prev[key].filter((v) => v !== value) : [...prev[key], value],
+    }));
+  };
+
+  if (error && !applications) return <ErrorState message={error} onRetry={load} />;
+  if (!applications || !job || !settings) return <LoadingState />;
+
+  return (
+    <div>
+      <button
+        onClick={() => navigate(-1)}
+        className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back
+      </button>
+
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">Applications — {job.title}</h2>
+          <p className="text-sm text-slate-500">
+            {applications.length} total · {pendingCount} pending screening
+          </p>
+        </div>
+        {canReview && (
+        <div className="flex flex-col gap-2 sm:flex-row flex-wrap">
+          <Button onClick={handleRunScreening} loading={running} disabled={pendingCount === 0} className="w-full sm:w-auto">
+            <Sparkles className="h-4 w-4" />
+            {pendingCount === 0 ? 'All screened' : `Run AI Screening (${pendingCount})`}
+          </Button>
+          {rerunnableCount > 0 && (
+            <Button variant="secondary" onClick={() => setConfirmRerun(true)} className="w-full sm:w-auto">
+              <RefreshCw className="h-4 w-4" /> Re-run Screening ({rerunnableCount})
+            </Button>
+          )}
+          <Button variant="secondary" onClick={handleShortlistAllScreened} disabled={screenedNotShortlistedIds.length === 0} loading={bulkLoading} className="w-full sm:w-auto">
+            <UserCheck className="h-4 w-4" /> Shortlist All Screened
+          </Button>
+          <Link href={`/company/jobs/${jobId}/interviews`} className="w-full sm:w-auto">
+            <Button variant="secondary" className="w-full sm:w-auto">
+              <CalendarCheck className="h-4 w-4" /> Interview Scheduling
+            </Button>
+          </Link>
+        </div>
+        )}
+      </div>
+
+      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {bulkMessage && (
+        <p role="status" className="mb-4 text-sm text-emerald-700">
+          {bulkMessage}
+        </p>
+      )}
+
+      {/* Job-level screening decision settings */}
+      {canReview && (
+      <Card className="mb-6 p-5">
+        <h3 className="mb-3 font-semibold text-slate-900">Screening settings</h3>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-6">
+          <div className="w-full sm:w-48">
+            <label htmlFor="minAcceptableScore" className="mb-1 block text-sm font-medium text-slate-700">Minimum acceptable score</label>
+            <input
+              id="minAcceptableScore"
+              type="number"
+              min={0}
+              max={100}
+              aria-invalid={settingsErrors.minAcceptableScore ? true : undefined}
+              aria-describedby={settingsErrors.minAcceptableScore ? 'minAcceptableScore-error' : undefined}
+              className={`${inputClass} min-h-[44px]`}
+              value={settings.minAcceptableScore}
+              onChange={(e) => setSettings({ ...settings, minAcceptableScore: e.target.value })}
+            />
+            {settingsErrors.minAcceptableScore && (
+              <p id="minAcceptableScore-error" role="alert" className="mt-1 text-xs text-red-600">
+                {settingsErrors.minAcceptableScore}
+              </p>
+            )}
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={settings.autoRejectBelowMinScore}
+              onChange={(e) => setSettings({ ...settings, autoRejectBelowMinScore: e.target.checked })}
+            />
+            Automatically reject candidates below this score
+          </label>
+          {/* Build plan P4 (§8) */}
+          <label className="flex min-h-[44px] items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={settings.autoAdvanceOnMatch}
+              onChange={(e) => setSettings({ ...settings, autoAdvanceOnMatch: e.target.checked })}
+            />
+            Auto-advance: screen every new application and shortlist or reject it on this score
+          </label>
+          <Button variant="secondary" onClick={handleSaveSettings} loading={settingsSaving} className="sm:ml-auto">
+            <Save className="h-4 w-4" /> Save
+          </Button>
+        </div>
+        {settingsSaved && (
+          <p className="mt-2 text-sm text-emerald-600">
+            Settings saved.{' '}
+            {rerunnableCount > 0 && (
+              <button type="button" onClick={() => setConfirmRerun(true)} className="font-medium underline underline-offset-2">
+                Re-run screening for {rerunnableCount} already-scored candidate{rerunnableCount === 1 ? '' : 's'} to apply it
+              </button>
+            )}
+          </p>
+        )}
+        <p className="mt-2 text-xs text-slate-400">
+          When enabled, screened applications scoring below this threshold are auto-marked Rejected. When disabled
+          (default), all screened applications stay available for manual review — use the checkboxes below to
+          Shortlist or Reject in bulk.
+        </p>
+        {/* Build plan P4 */}
+        <p className="mt-1 text-xs text-slate-400">
+          Auto-advance (off by default): each new application — from logged-in candidates or your careers page — is
+          screened right away and moved to Shortlisted (score at or above the minimum) or Rejected, and the candidate
+          is emailed.
+        </p>
+      </Card>
+      )}
+
+      {/* Build plan P7 */}
+      {canReview && (
+      <FinalScoreSettingsCard
+        job={job}
+        onSaved={(updated) => {
+          setJob(updated);
+          load();
+        }}
+      />
+      )}
+
+      {/* Filters */}
+      <Card className="mb-6 p-5">
+        <button
+          type="button"
+          onClick={() => setShowFilters((v) => !v)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <span className="flex items-center gap-2 font-semibold text-slate-900">
+            <SlidersHorizontal className="h-4 w-4" /> Filters {filtersActive && <span className="h-2 w-2 rounded-full bg-brand-600" />}
+          </span>
+          <span className="text-sm text-brand-600">{showFilters ? 'Hide' : 'Show'}</span>
+        </button>
+
+        {showFilters && (
+          <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <FilterGroup label="AI Score">
+              <ChipGroup
+                options={SCORE_PRESETS}
+                selected={filters.scorePreset}
+                onSelect={(key) => setFilters({ ...filters, scorePreset: key })}
+              />
+              {filters.scorePreset === 'custom' && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    className={`${inputClass} w-20`}
+                    value={filters.scoreMin}
+                    onChange={(e) => setFilters({ ...filters, scoreMin: e.target.value })}
+                  />
+                  <span className="text-slate-400">–</span>
+                  <input
+                    type="number"
+                    placeholder="Max"
+                    className={`${inputClass} w-20`}
+                    value={filters.scoreMax}
+                    onChange={(e) => setFilters({ ...filters, scoreMax: e.target.value })}
+                  />
+                </div>
+              )}
+            </FilterGroup>
+
+            <FilterGroup label="Experience">
+              <ChipGroup
+                options={EXPERIENCE_PRESETS}
+                selected={filters.experience}
+                onSelect={(key) => setFilters({ ...filters, experience: key })}
+              />
+            </FilterGroup>
+
+            <FilterGroup label="Sort by">
+              <select
+                className={inputClass}
+                value={filters.sortBy}
+                onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.key} value={opt.key}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <label className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={filters.top10Only}
+                  onChange={(e) => setFilters({ ...filters, top10Only: e.target.checked })}
+                />
+                Limit to top 10
+              </label>
+            </FilterGroup>
+
+            {skillOptions.length > 0 && (
+              <FilterGroup label="Skills">
+                <MultiChipGroup options={skillOptions} selected={filters.skills} onToggle={(v) => toggleMulti('skills', v)} />
+              </FilterGroup>
+            )}
+
+            {educationOptions.length > 0 && (
+              <FilterGroup label="Education">
+                <MultiChipGroup
+                  options={educationOptions}
+                  selected={filters.education}
+                  onToggle={(v) => toggleMulti('education', v)}
+                />
+              </FilterGroup>
+            )}
+
+            <FilterGroup label="Application status">
+              <MultiChipGroup
+                options={STATUS_OPTIONS}
+                selected={filters.statuses}
+                onToggle={(v) => toggleMulti('statuses', v)}
+                formatLabel={(v) =>
+                  // Display wording: the client is now called "company".
+                  v === 'SUBMITTED_TO_CLIENT' ? 'Submitted To Company' :
+                  v
+                    .toLowerCase()
+                    .split('_')
+                    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ')
+                }
+              />
+            </FilterGroup>
+
+            <div className="flex items-end sm:col-span-2 lg:col-span-3">
+              <Button variant="ghost" onClick={() => setFilters(DEFAULT_FILTERS)}>
+                <X className="h-4 w-4" /> Clear all filters
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {canReview && selected.size > 0 && (
+        <div className="mb-4 flex flex-col gap-3 rounded-lg border border-brand-200 bg-brand-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm font-medium text-brand-800">{selected.size} candidate(s) selected</span>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setConfirmBulk('SHORTLISTED')}>
+              Shortlist selected
+            </Button>
+            <Button variant="danger" onClick={() => setConfirmBulk('REJECTED')}>
+              Reject selected
+            </Button>
+            <Button variant="ghost" onClick={() => setSelected(new Set())}>
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {applications.length === 0 ? (
+        <EmptyState icon={Users} title="No applications yet" description="Candidates who apply to this job will show up here." />
+      ) : filtered.length === 0 ? (
+        <EmptyState icon={SlidersHorizontal} title="No candidates match these filters" description="Try adjusting or clearing your filters." />
+      ) : (
+        <Card className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">
+                  {canReview && <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />}
+                </th>
+                <th className="px-4 py-3">Rank</th>
+                <th className="px-4 py-3">Candidate</th>
+                <th className="px-4 py-3">Match</th>
+                {/* Build plan P7 */}
+                <th className="px-4 py-3">Final</th>
+                <th className="px-4 py-3">Experience</th>
+                <th className="px-4 py-3">Education</th>
+                <th className="px-4 py-3">Matched skills</th>
+                <th className="px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filtered.map((app, index) => {
+                const actions = getApplicationActionState(app);
+                return (
+                  <tr key={app.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3">
+                      {canReview && <input type="checkbox" checked={selected.has(app.id)} onChange={() => toggleSelected(app.id)} />}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-slate-900">#{index + 1}</td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-slate-900">{app.candidate.fullName}</p>
+                      <StatusBadge status={app.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      {getScore(app) != null ? <ScoreRing score={getScore(app)} size={36} /> : <span className="text-slate-400">—</span>}
+                    </td>
+                    {/* Build plan P7: CV + interview combined */}
+                    <td className="px-4 py-3">
+                      {app.finalScore != null ? (
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            job.finalThreshold != null && app.finalScore < job.finalThreshold
+                              ? 'bg-orange-50 text-orange-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}
+                        >
+                          {Math.round(app.finalScore)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{getExperience(app)} yrs</td>
+                    <td className="max-w-[160px] px-4 py-3 text-slate-600">{getDegree(app) || '—'}</td>
+                    <td className="max-w-xs px-4 py-3 text-slate-600">
+                      {(app.screeningResult?.matchedSkills || []).slice(0, 4).join(', ') || '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex min-w-[140px] flex-col gap-1.5">
+                        {canReview && (
+                        <Button
+                          variant="danger"
+                          className="w-full justify-start px-3 py-1.5 text-xs"
+                          disabled={actions.reject.disabled}
+                          loading={rejecting && confirmRejectId === app.id}
+                          title={actions.reject.title}
+                          onClick={() => setConfirmRejectId(app.id)}
+                        >
+                          <XCircle className="h-3.5 w-3.5" /> {actions.reject.label}
+                        </Button>
+                        )}
+                        {rowError[app.id] && <p className="text-xs text-red-600">{rowError[app.id]}</p>}
+                        <Link
+                          href={`/company/jobs/${jobId}/candidates/${app.candidate.id}`}
+                          className="mt-0.5 inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
+                        >
+                          <Eye className="h-3.5 w-3.5" /> View
+                        </Link>
+                        {app.resume && (
+                          <button
+                            type="button"
+                            onClick={() => downloadCv(app)}
+                            className="inline-flex items-center gap-1 text-left text-xs text-brand-600 hover:text-brand-700"
+                          >
+                            <Download className="h-3.5 w-3.5" /> CV
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      <ConfirmDialog
+        open={confirmBulk !== null}
+        title={confirmBulk === 'SHORTLISTED' ? 'Shortlist selected candidates?' : 'Reject selected candidates?'}
+        description={`This will update ${selected.size} application(s).`}
+        confirmLabel={confirmBulk === 'SHORTLISTED' ? 'Shortlist' : 'Reject'}
+        onConfirm={runBulkAction}
+        onCancel={() => setConfirmBulk(null)}
+        loading={bulkLoading}
+      />
+
+      <ConfirmDialog
+        open={confirmRerun}
+        title="Re-run screening?"
+        description={`This re-scores ${rerunnableCount} already-screened candidate(s) using the current job requirements and screening settings. Shortlisted candidates are never touched. This calls the AI again and may take a moment.`}
+        confirmLabel="Re-run"
+        onConfirm={handleRerunScreening}
+        onCancel={() => setConfirmRerun(false)}
+        loading={rerunning}
+      />
+
+      <ConfirmDialog
+        open={confirmRejectId !== null}
+        title="Reject this candidate?"
+        description="This marks the application as rejected and notifies the candidate. This cannot be undone."
+        confirmLabel="Reject"
+        onConfirm={runRejectOne}
+        onCancel={() => setConfirmRejectId(null)}
+        loading={rejecting}
+      />
+    </div>
+  );
+}
+
+function FilterGroup({ label, children }) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function ChipGroup({ options, selected, onSelect }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => (
+        <button
+          key={opt.key}
+          type="button"
+          onClick={() => onSelect(opt.key)}
+          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+            selected === opt.key ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MultiChipGroup({ options, selected, onToggle, formatLabel = (v) => v }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onToggle(opt)}
+          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+            selected.includes(opt) ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          {formatLabel(opt)}
+        </button>
+      ))}
+    </div>
+  );
+}
