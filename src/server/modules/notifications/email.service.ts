@@ -29,22 +29,13 @@ function layout(bodyHtml) {
 </html>`;
 }
 
-function viewApplicationButton(applicationId) {
-  const url = `${env.clientUrl}/candidate/applications/${applicationId}`;
-  return `<p style="margin:24px 0;">
-    <a href="${url}" style="background:#2a4bd6;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:bold;display:inline-block;">
-      View Application
-    </a>
-  </p>
-  <p style="color:#64748b;font-size:12px;">If the button doesn't work, copy this link: ${url}</p>`;
-}
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-// The candidate's personal status link (no login needed). Optional button
+// The candidate's personal status link (no login needed). Candidates have no
+// RecruitIQ account, so every candidate email carries it. Optional button
 // label turns it into the main call to action (e.g. booking a slot).
-// Only when the public status page exists (FEATURE_GUEST_APPLY) — otherwise
-// the link would be dead, so the email reads exactly as before.
 function statusLinkBlock(applicationId, buttonLabel?: string, intro?: string) {
-  if (!applicationId || !env.features.guestApply) return '';
+  if (!applicationId) return '';
   const url = applicationTrackUrl(applicationId);
   if (buttonLabel) {
     return `${intro ? `<p>${intro}</p>` : ''}<p style="margin:24px 0;">
@@ -86,14 +77,17 @@ export async function sendApplicationStatusEmail(application) {
 
   if (application.status === 'SHORTLISTED') {
     const subject = `You've been shortlisted for ${jobTitle} at ${companyName}`;
+    // Instant-link jobs email the interview link separately; slot jobs book from the status link.
+    const instant = application.job.interviewFlow === 'INSTANT';
     const html = layout(`
-      <p>Hi ${candidateName},</p>
-      <p>Good news — <strong>${companyName}</strong> has shortlisted your application for
-      <strong>${jobTitle}</strong> and would like to move forward to the next stage.</p>
-      <!-- <p>Log in to RecruitIQ to view your application and schedule your interview.</p> -->
-      ${statusLinkBlock(application.id, 'Book your interview time', 'Pick a time for your interview — no login needed:')}
-      <p>${env.features.guestApply ? 'Or log in' : 'Log in'} to RecruitIQ to view your application and schedule your interview.</p>
-      ${viewApplicationButton(application.id)}
+      <p>Hi ${esc(candidateName)},</p>
+      <p>Good news — <strong>${esc(companyName)}</strong> has shortlisted your application for
+      <strong>${esc(jobTitle)}</strong> and would like to move forward to the next stage.</p>
+      ${
+        instant
+          ? `<p>Your interview link is on its way in a separate email.</p>${statusLinkBlock(application.id)}`
+          : statusLinkBlock(application.id, 'Book your interview time', 'Pick a time for your interview — no login needed:')
+      }
       <p>— The RecruitIQ team</p>
     `);
     return sendAndLog({ to, subject, html, type: 'APPLICATION_SHORTLISTED', applicationId: application.id });
@@ -102,13 +96,12 @@ export async function sendApplicationStatusEmail(application) {
   if (application.status === 'REJECTED') {
     const subject = `Update on your application for ${jobTitle}`;
     const html = layout(`
-      <p>Hi ${candidateName},</p>
-      <p>Thank you for applying for <strong>${jobTitle}</strong> at <strong>${companyName}</strong>.
+      <p>Hi ${esc(candidateName)},</p>
+      <p>Thank you for applying for <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>.
       After careful review, the status of your application has changed and the company will not be
       moving forward with it at this time.</p>
       <p>We appreciate the time you invested in your application and encourage you to apply to other
       roles that match your background.</p>
-      ${viewApplicationButton(application.id)}
       ${statusLinkBlock(application.id)}
       <p>— The RecruitIQ team</p>
     `);
@@ -207,7 +200,7 @@ export async function sendInterviewInviteEmail({ to, candidateName, jobTitle, co
 // interview link has already gone to the candidate.
 export async function sendSecondRoundRequestedEmail({ to, hrName, companyName, candidateName, jobTitle, reason, notes, jobId, candidateId, applicationId }) {
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-  const url = `${env.clientUrl.split(',')[0].trim()}/company/jobs/${jobId}/candidates/${candidateId}`;
+  const url = `${env.publicAppUrl}/company/jobs/${jobId}/candidates/${candidateId}`;
   const subject = `2nd round requested: ${candidateName} — ${jobTitle}`;
   const html = layout(`
     <p>Hello,</p>
@@ -267,28 +260,26 @@ export async function sendPasswordResetEmail({ to, link, expiresInMinutes = 60 }
   return sendAndLog({ to, subject, html, type: 'ACCOUNT_SETUP', applicationId: null });
 }
 
-// Build plan P4: sent after a careers-portal apply. `link` is a set-password
-// link for a new guest account, or null when the email already has an
-// account (then the candidate is pointed at the login page instead).
-export async function sendCandidateApplicationReceivedEmail({ to, fullName, companyName, jobTitle, link, trackUrl }) {
-  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+// Build plan P4: sent after a careers-portal apply. Candidates have no login:
+// the personal status link (trackUrl) is how they follow the application,
+// and every later step is emailed too.
+export async function sendCandidateApplicationReceivedEmail({ to, fullName, companyName, jobTitle, trackUrl }) {
   const what = jobTitle ? `your application for <strong>${esc(jobTitle)}</strong>` : 'your CV';
   const subject = jobTitle ? `We received your application for ${jobTitle}` : `We received your CV — ${companyName}`;
-  const loginUrl = `${env.clientUrl.split(',')[0].trim()}/auth/login`;
-  const action = link
-    ? `<p>Set a password to track your application and attend interviews from your RecruitIQ account.</p>
-       <p style="margin:24px 0;">
-         <a href="${link}" style="background:#2a4bd6;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:bold;display:inline-block;">
-           Set your password
-         </a>
-       </p>
-       <p style="color:#64748b;font-size:12px;">This link works once and expires in 72 hours. If the button doesn't work, copy this link: ${link}</p>`
-    : `<p>You already have a RecruitIQ account with this email — <a href="${loginUrl}">log in</a> to track it.</p>`;
   const html = layout(`
     <p>Hi ${esc(fullName)},</p>
     <p>Thanks — <strong>${esc(companyName)}</strong> has received ${what}. Our AI is reviewing it now.</p>
-    ${trackUrl ? `<p>You can check the status any time: <a href="${trackUrl}">${trackUrl}</a></p>` : ''}
-    ${action}
+    ${
+      trackUrl
+        ? `<p style="margin:24px 0;">
+      <a href="${trackUrl}" style="background:#2a4bd6;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:bold;display:inline-block;">
+        Check your application status
+      </a>
+    </p>
+    <p style="color:#64748b;font-size:12px;">No login needed — this link is personal to you. If the button doesn't work, copy this link: ${trackUrl}</p>`
+        : ''
+    }
+    <p>We'll email you at every step, including your interview link and any status change.</p>
     <p>— The RecruitIQ team</p>
   `);
   return sendAndLog({ to, subject, html, type: 'ACCOUNT_SETUP', applicationId: null });
@@ -330,11 +321,121 @@ export async function sendInterviewConfirmationEmail({ application, slot, joinLi
       </a>
     </p>
     <p style="color:#64748b;font-size:12px;">Open this at your interview time. Use a quiet room, a working camera and microphone.
-    Keep the link private — it opens your interview. If the button doesn't work, copy this link: ${joinLink}</p>`
-        : viewApplicationButton(application.id)
+    Keep the link private — it opens your interview. If the button doesn't work, copy this link: ${joinLink}</p>
+    ${statusLinkBlock(application.id)}`
+        : statusLinkBlock(application.id, 'View your interview details', 'Your join link and any changes are on your personal status page — no login needed:')
     }
-    ${statusLinkBlock(application.id)}
     <p>— The RecruitIQ team</p>
   `);
   return sendAndLog({ to, subject, html, type: 'INTERVIEW_CONFIRMATION', applicationId: application.id });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Build plan P9 (/recq flow)
+// ─────────────────────────────────────────────────────────────
+
+// §12/§17: the email verification code. Sent ONLY to the address extracted
+// from the uploaded resume (emailOtp.service.ts). The code is never logged in
+// production and never returned in an API response.
+export async function sendRecqOtpEmail({ to, code, agencyName, jobTitle }: { to: string; code: string; agencyName?: string; jobTitle?: string }) {
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const context = jobTitle
+    ? `your application for <strong>${esc(jobTitle)}</strong>${agencyName ? ` at <strong>${esc(agencyName)}</strong>` : ''}`
+    : agencyName
+      ? `your application at <strong>${esc(agencyName)}</strong>`
+      : 'your application';
+  const subject = `Your RecruitIQ verification code is ${code}`;
+  const html = layout(`
+    <p>Hi,</p>
+    <p>Use this code to verify your email and continue ${context}:</p>
+    <p style="text-align:center;margin:24px 0;">
+      <span style="display:inline-block;font-size:30px;letter-spacing:8px;font-weight:bold;color:#0f172a;background:#f1f5f9;border-radius:10px;padding:14px 22px;">${esc(code)}</span>
+    </p>
+    <p style="color:#64748b;font-size:12px;">This code expires in 5 minutes. If you didn't request it, you can ignore this email.</p>
+    <p>— The RecruitIQ team</p>
+  `);
+  return sendAndLog({ to, subject, html, type: 'OTP_VERIFICATION', applicationId: null });
+}
+
+// §6/§18: interview access after email verification. Reuses the INTERVIEW_INVITE
+// email type/log. `windowStart`/`windowEnd` (optional) describe the agency's
+// configured interview window; otherwise it reads like the instant invite.
+export async function sendRecqInterviewAccessEmail({ to, candidateName, jobTitle, companyName, link, windowStart, windowEnd, applicationId }) {
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const fmt = (d) =>
+    new Date(d).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const subject = `Your interview for ${jobTitle} at ${companyName}`;
+  const windowBlock = windowStart || windowEnd
+    ? `<p style="background:#f1f5f9;border-radius:8px;padding:12px 16px;margin:16px 0;">
+         <strong>Interview window</strong><br />
+         ${windowStart ? `Opens: ${fmt(windowStart)}<br />` : ''}
+         ${windowEnd ? `Closes: ${fmt(windowEnd)}` : ''}
+       </p>`
+    : '';
+  const html = layout(`
+    <p>Hi ${esc(candidateName)},</p>
+    <p>You're verified and eligible to interview for <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>.</p>
+    ${windowBlock}
+    <p style="margin:24px 0;">
+      <a href="${link}" style="background:#2a4bd6;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:bold;display:inline-block;">
+        Start your interview
+      </a>
+    </p>
+    <p>Before you start: a quiet room, a working camera and microphone, about 15–20 minutes. If you get disconnected, open the same link again to continue.</p>
+    <p style="color:#64748b;font-size:12px;">Keep this link private — it opens your interview. If the button doesn't work, copy this link: ${link}</p>
+    ${statusLinkBlock(applicationId)}
+    <p>We'll email you again when your interview is complete and whenever your status changes.</p>
+    <p>— The RecruitIQ team</p>
+  `);
+  return sendAndLog({ to, subject, html, type: 'INTERVIEW_INVITE', applicationId: applicationId ?? null });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Candidate status updates — candidates have no login, so every change the
+// candidate needs to know about is emailed, with their status link.
+// ─────────────────────────────────────────────────────────────
+
+async function loadCandidateApplication(applicationId) {
+  return prisma.application.findUnique({
+    where: { id: applicationId },
+    include: { candidate: { include: { user: { select: { email: true } } } }, job: { include: { company: { select: { name: true } } } } },
+  });
+}
+
+// The AI interview has ended (or the agency marked it done). Never mentions
+// scores — candidates don't see interview or final scores.
+export async function sendInterviewCompletedEmail(applicationId, { round = 1 } = {}) {
+  const application = await loadCandidateApplication(applicationId);
+  if (!application) return;
+  const { candidate, job } = application;
+  const subject = `Thanks for completing your ${round > 1 ? 'second ' : ''}interview for ${job.title}`;
+  const html = layout(`
+    <p>Hi ${esc(candidate.fullName)},</p>
+    <p>Thank you for completing your ${round > 1 ? 'second ' : ''}interview for <strong>${esc(job.title)}</strong> at
+    <strong>${esc(job.company.name)}</strong>. Your interview has been submitted and the hiring team is now reviewing it.</p>
+    <p>There's nothing more you need to do right now — we'll email you as soon as there's an update.</p>
+    ${statusLinkBlock(application.id)}
+    <p>— The RecruitIQ team</p>
+  `);
+  return sendAndLog({ to: candidate.user.email, subject, html, type: 'INTERVIEW_COMPLETED', applicationId: application.id });
+}
+
+// The agency cancelled the candidate's booked interview slot; they can book
+// another time from their status link.
+export async function sendInterviewCancelledEmail(applicationId, { startTime }: { startTime?: Date } = {}) {
+  const application = await loadCandidateApplication(applicationId);
+  if (!application) return;
+  const { candidate, job } = application;
+  const when = startTime
+    ? ` on ${new Date(startTime).toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+    : '';
+  const subject = `Your interview for ${job.title} was cancelled — please pick a new time`;
+  const html = layout(`
+    <p>Hi ${esc(candidate.fullName)},</p>
+    <p><strong>${esc(job.company.name)}</strong> had to cancel your interview for <strong>${esc(job.title)}</strong>${when}.
+    Sorry for the inconvenience — your application is still active.</p>
+    ${statusLinkBlock(application.id, 'Pick a new interview time', 'Choose another time that suits you — no login needed:')}
+    <p>— The RecruitIQ team</p>
+  `);
+  return sendAndLog({ to: candidate.user.email, subject, html, type: 'INTERVIEW_CANCELLED', applicationId: application.id });
 }

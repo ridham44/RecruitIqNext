@@ -6,5 +6,6 @@ export function homePathForRole(role) {
   if (role === 'COMPANY' || role === 'RECRUITER') return '/company/dashboard';
   // Build plan P8: client HR portal.
   if (role === 'CLIENT_HR') return '/client/candidates';
-  return '/candidate/dashboard';
+  // Candidates have no login or dashboard.
+  return '/';
 }

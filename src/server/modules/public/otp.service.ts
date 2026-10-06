@@ -74,6 +74,13 @@ export async function verifyOtp({ phone: rawPhone, code }) {
   const phone = requirePhone(rawPhone);
   const row = await prisma.phoneOtp.findFirst({ where: { phone, verifiedAt: null }, orderBy: { createdAt: 'desc' } });
 
+  // Testing only (OTP_TEST_CODE): the fixed code always verifies.
+  if (env.otpTestCode && String(code || '').trim() === env.otpTestCode) {
+    if (row) await prisma.phoneOtp.update({ where: { id: row.id }, data: { verifiedAt: new Date() } });
+    const otpToken = jwt.sign({ typ: 'otp', phone }, env.jwtSecret, { expiresIn: OTP_TOKEN_TTL });
+    return { phone, otpToken };
+  }
+
   if (!row || row.expiresAt <= new Date()) {
     throw ApiError.badRequest('This code has expired. Please request a new one.', 'OTP_EXPIRED');
   }

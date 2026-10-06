@@ -76,8 +76,8 @@ async function processUntilDone(token) {
 }
 
 async function startServer() {
-  const code = `import('./src/server/app.js').then(({ createApp }) => createApp().listen(${PORT}, () => console.log('READY')))`;
-  const child = spawn(process.execPath, ['-e', code], {
+  const code = `import('./src/server/standalone.ts').then(({ listen }) => listen(${PORT}, () => console.log('READY')))`;
+  const child = spawn(process.execPath, ['--import', 'tsx', '-e', code], {
     env: { ...process.env, FEATURE_GUEST_APPLY: 'true', SMS_DRIVER: 'console', NODE_ENV: 'development', PORT: String(PORT) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

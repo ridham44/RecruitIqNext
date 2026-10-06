@@ -14,6 +14,7 @@
 // qualifications alone, regardless of the gender distribution below.
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { buildDocx, DOCX_MIME } from '../scripts/lib/testDocx.mjs';
 
 const prisma = new PrismaClient();
 const DEMO_PASSWORD = 'Demo@1234';
@@ -643,7 +644,12 @@ async function main() {
   // Company/Candidate/Job/Resume/Application/ScreeningResult via onDelete:
   // Cascade), so `npm run db:seed` can be re-run safely.
   const demoEmails = [COMPANY_EMAIL, ...CANDIDATES.map((c) => c.email)];
+  const oldResumes = await prisma.resume.findMany({
+    where: { candidate: { user: { email: { in: demoEmails } } } },
+    select: { storageKey: true },
+  });
   await prisma.user.deleteMany({ where: { email: { in: demoEmails } } });
+  await prisma.resumeBlob.deleteMany({ where: { id: { in: oldResumes.map((r) => r.storageKey) } } });
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
@@ -738,25 +744,32 @@ ability.`,
             headline: c.headline,
             skills: c.skills,
             gender: c.gender,
-            university: c.university,
-            college: c.college,
-            degree: c.degree,
-            academicStatus: c.academicStatus,
-            currentSemester: c.currentSemester,
-            latestSpi: c.latestSpi,
+            // The flat university/degree fields moved to the Education model.
+            educations: {
+              create: {
+                degree: c.parsedData.education?.[0]?.degree || c.degree,
+                fieldOfStudy: c.parsedData.education?.[0]?.field || null,
+                institution: c.college || c.university,
+                isCurrentlyStudying: c.academicStatus === 'ONGOING',
+                grade: c.latestSpi ? `${c.latestSpi} CGPA` : null,
+              },
+            },
           },
         },
       },
       include: { candidate: true },
     });
 
+    // Real .docx bytes in the database storage driver, so "Download CV" works.
+    const docx = buildDocx(c.resumeText.split('\n'));
+    const blob = await prisma.resumeBlob.create({ data: { data: docx } });
     const resume = await prisma.resume.create({
       data: {
         candidateId: user.candidate.id,
-        fileName: c.resumeFileName,
-        fileType: 'application/pdf',
-        fileSize: Buffer.byteLength(c.resumeText, 'utf-8'),
-        storageKey: `seed/${user.candidate.id}/${c.resumeFileName}`,
+        fileName: c.resumeFileName.replace(/\.pdf$/, '.docx'),
+        fileType: DOCX_MIME,
+        fileSize: docx.length,
+        storageKey: blob.id,
         storageUrl: null,
         rawText: c.resumeText,
         parsedData: c.parsedData,

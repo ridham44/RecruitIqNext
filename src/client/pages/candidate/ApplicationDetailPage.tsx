@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useParams, useNavigate } from '@/client/lib/navigation';
 import { ArrowLeft, CalendarCheck, Clock, Video, Info, Bot } from 'lucide-react';
 import { applicationsApi } from '../../services/applications';
@@ -186,9 +185,7 @@ export default function ApplicationDetailPage() {
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-slate-900">{job.title}</h2>
         <p className="text-sm text-slate-500">
-          <Link href={`/candidate/jobs/${job.id}`} className="hover:text-brand-600">
-            {job.company.name}
-          </Link>
+          {job.company.name}
         </p>
       </div>
 

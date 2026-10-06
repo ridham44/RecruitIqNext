@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useNavigate } from '@/client/lib/navigation';
 import { FileUp, FileCheck2, ShieldCheck, ArrowLeft, Check } from 'lucide-react';
 import { publicApi } from '../../services/public';
@@ -172,7 +171,7 @@ export default function ApplyWizard({ slug, company, job }) {
         setStep(0);
         setError(err.message);
       } else if (err.code === 'EMAIL_HAS_ACCOUNT') {
-        // Show it next to the email, with a way to log in instead.
+        // Show it next to the email.
         setStep(1);
         setError('');
         setEmailHasAccount(true);
@@ -188,16 +187,8 @@ export default function ApplyWizard({ slug, company, job }) {
     }
   };
 
-  const emailError = emailHasAccount ? (
-    <>
-      {fieldErrors.email}{' '}
-      <Link href="/auth/login" className="font-medium text-brand-600 underline">
-        Log in
-      </Link>
-    </>
-  ) : (
-    fieldErrors.email
-  );
+  // Candidates have no login, so the server's message is all there is to show.
+  const emailError = fieldErrors.email;
 
   const cls = `${inputClass} min-h-[44px]`;
 

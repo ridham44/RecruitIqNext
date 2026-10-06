@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useParams } from '@/client/lib/navigation';
-import { Video, Mic, Wifi, Clock3, Mail, MessageSquare, CircleCheck, CircleAlert, Copy, Check } from 'lucide-react';
+import { Video, Mic, Wifi, Clock3, Mail, MessageSquare, CircleCheck, CircleAlert, Copy, Check, CalendarClock } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api, setInterviewSession } from '../../services/api';
 import CareersShell from './CareersShell';
@@ -109,9 +108,10 @@ export default function InterviewLinkPage() {
           <CircleAlert className="mx-auto mb-3 h-10 w-10 text-slate-400" />
           <h1 className="text-lg font-semibold text-slate-900">This link can't be opened</h1>
           <p className="mt-2 text-sm text-slate-600">{error}</p>
-          <Link href="/auth/login" className="mt-5 inline-block">
-            <Button variant="secondary">Log in to your account</Button>
-          </Link>
+          {/* Candidates have no login — the latest link is always in their email. */}
+          <p className="mt-4 text-sm text-slate-500">
+            Please use the most recent interview email you received, or contact the recruitment agency that invited you.
+          </p>
         </Card>
       </CareersShell>
     );
@@ -121,16 +121,43 @@ export default function InterviewLinkPage() {
 
   if (!info.canJoin) {
     const done = info.reason === 'INTERVIEW_COMPLETED';
+    // Build plan P9: a heading per reason — "not open yet" is not "no longer active".
+    const notOpen = info.reason === 'INTERVIEW_NOT_OPEN';
+    const heading =
+      {
+        INTERVIEW_COMPLETED: 'Interview complete',
+        INTERVIEW_NOT_OPEN: 'Your interview opens soon',
+        INVITE_EXPIRED: 'Interview window closed',
+        INTERVIEW_CANCELLED: 'Interview cancelled',
+        AGENCY_UNAVAILABLE: 'Not available right now',
+      }[info.reason] || 'This link is no longer active';
+    const when = (d) =>
+      new Date(d).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    const opensAt = info.availableFrom || info.window?.start;
     return (
       <CareersShell company={company} narrow>
         <Card className="p-6 text-center sm:p-8">
           {done ? (
             <CircleCheck className="mx-auto mb-3 h-10 w-10 text-emerald-600" />
+          ) : notOpen ? (
+            <CalendarClock className="mx-auto mb-3 h-10 w-10 text-brand-500" />
           ) : (
             <CircleAlert className="mx-auto mb-3 h-10 w-10 text-amber-500" />
           )}
-          <h1 className="text-lg font-semibold text-slate-900">{done ? 'Interview complete' : 'This link is no longer active'}</h1>
+          <h1 className="text-lg font-semibold text-slate-900">{heading}</h1>
           <p className="mt-2 text-sm text-slate-600">{info.message}</p>
+          {notOpen && opensAt && (
+            <p className="mx-auto mt-4 max-w-xs rounded-lg bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+              Opens <strong>{when(opensAt)}</strong>
+              {info.window?.end ? (
+                <>
+                  <br />
+                  Closes {when(info.window.end)}
+                </>
+              ) : null}
+              <span className="mt-1 block text-xs text-slate-500">Open this same link then to start.</span>
+            </p>
+          )}
           <p className="mt-1 text-xs text-slate-400">
             {info.job.title} · {info.company.name}
           </p>

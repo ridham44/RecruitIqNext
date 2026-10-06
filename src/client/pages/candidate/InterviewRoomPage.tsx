@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from '@/client/lib/navigation';
+import { useParams } from '@/client/lib/navigation';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import {
   Bot,
@@ -92,6 +92,15 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Chrome can fire `onend` while speech is still coming out of the speakers
+// (long utterances, some voices). Before the mic may open, also wait until
+// the browser itself reports nothing is being spoken (capped, so a stuck
+// `speaking` flag can never lock the candidate out).
+async function waitForSilence(maxMs = 8000) {
+  const started = Date.now();
+  while (window.speechSynthesis?.speaking && Date.now() - started < maxMs) await wait(100);
+}
+
 // export default function InterviewRoomPage() {
 //   const { interviewId } = useParams();
 // Build plan P5: the instant-interview link page renders this same room with
@@ -105,7 +114,6 @@ export interface InterviewRoomPageProps {
 export default function InterviewRoomPage({ interviewIdOverride, onDone, doneLabel }: InterviewRoomPageProps = {}) {
   const params = useParams();
   const interviewId = interviewIdOverride || params.interviewId;
-  const navigate = useNavigate();
   const videoRef = useRef(null);
   const roomRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -275,6 +283,7 @@ export default function InterviewRoomPage({ interviewIdOverride, onDone, doneLab
       const voice = pickVoiceForGender(voices, voiceGender);
       await speak(nextQuestion.text, voice, isEndedRef);
       if (isEndedRef.current) return;
+      await waitForSilence();
       await wait(POST_SPEECH_GRACE_MS);
       // Guard again after the await — cleanupAll may have run while the
       // utterance was playing or during the grace period.
@@ -355,6 +364,8 @@ export default function InterviewRoomPage({ interviewIdOverride, onDone, doneLab
 
   const startRecording = () => {
     if (!SpeechRecognitionCtor || aiSpeaking || recording || showCorrectionBox) return;
+    // Never open the mic while the browser is still speaking the question.
+    if (window.speechSynthesis?.speaking) return;
     // Belt and braces: cancel any leftover/queued utterance before the mic
     // goes live, in case something re-queued speech after aiSpeaking
     // already flipped false.
@@ -497,13 +508,16 @@ export default function InterviewRoomPage({ interviewIdOverride, onDone, doneLab
         {closingMessage && (
           <p className="mt-3 rounded-lg bg-slate-50 px-4 py-3 text-left text-sm text-slate-700">{closingMessage}</p>
         )}
-        <p className="mt-2 text-sm text-slate-500">Thanks for taking the time to interview with us. The company will follow up on next steps.</p>
-        {/* <Button className="mt-6" onClick={() => navigate(`/candidate/applications`)}>
-          Back to my applications
-        </Button> */}
-        <Button className="mt-6" onClick={() => (onDone ? onDone() : navigate(`/candidate/applications`))}>
-          {doneLabel || 'Back to my applications'}
-        </Button>
+        <p className="mt-2 text-sm text-slate-500">
+          Thanks for taking the time to interview with us. We'll email you a confirmation now, and again whenever your status
+          changes.
+        </p>
+        {/* Candidates have no login or dashboard — only the link page's own action. */}
+        {onDone && (
+          <Button className="mt-6" onClick={onDone}>
+            {doneLabel || 'Done'}
+          </Button>
+        )}
       </div>
     );
   }

@@ -42,8 +42,8 @@ const step = (t) => console.log(`\n== ${t} ==`);
 const tokenFromLink = (link) => link.split('/interview/')[1];
 
 async function startServer() {
-  const code = `import('./src/server/app.js').then(({ createApp }) => createApp().listen(${PORT}, () => console.log('READY')))`;
-  const child = spawn(process.execPath, ['-e', code], {
+  const code = `import('./src/server/standalone.ts').then(({ listen }) => listen(${PORT}, () => console.log('READY')))`;
+  const child = spawn(process.execPath, ['--import', 'tsx', '-e', code], {
     env: { ...process.env, FEATURE_GUEST_APPLY: 'true', FEATURE_INSTANT_INTERVIEW: 'true', SMS_DRIVER: 'console', BREVO_API_KEY: '', NODE_ENV: 'development' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

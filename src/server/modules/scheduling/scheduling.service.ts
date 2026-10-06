@@ -6,7 +6,7 @@ import { getOwnedJob } from '../jobs/jobs.service';
 // import { inviteApplication } from '../interviews/instantInterview.service';
 // import { inviteApplication, ensureSlotInterviewLink, interviewLinkFor } from '../interviews/instantInterview.service';
 import { inviteApplication, ensureSlotInterviewLink, interviewLinkFor, createSecondRound, roundsForApplication } from '../interviews/instantInterview.service';
-import { sendInterviewConfirmationEmail } from '../notifications/email.service';
+import { sendInterviewConfirmationEmail, sendInterviewCancelledEmail, sendInterviewCompletedEmail } from '../notifications/email.service';
 
 async function getCandidateIdForUser(userId) {
   const candidate = await prisma.candidate.findUnique({ where: { userId } });
@@ -133,6 +133,11 @@ export async function cancelSlot(userId, jobId, slotId) {
   }
 
   await prisma.$transaction(operations);
+
+  // Candidates have no login — email them so they can pick a new time.
+  if (activeInterview) {
+    await sendInterviewCancelledEmail(activeInterview.applicationId, { startTime: slot.startTime }).catch(() => {});
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -421,6 +426,7 @@ export async function markInterviewCompleted(userId, jobId, interviewId) {
   // Build plan P5: instant interviews have no slot — check the job via the application.
   const interview = await prisma.interview.findUnique({ where: { id: interviewId }, include: { slot: true, application: true } });
   if (!interview || interview.application.jobId !== jobId) throw ApiError.notFound('Interview not found');
+  const alreadyCompleted = interview.status === INTERVIEW_STATUS.COMPLETED;
 
   await prisma.$transaction([
     prisma.interview.update({ where: { id: interviewId }, data: { status: INTERVIEW_STATUS.COMPLETED } }),
@@ -429,4 +435,8 @@ export async function markInterviewCompleted(userId, jobId, interviewId) {
       data: { status: APPLICATION_STATUS.INTERVIEW_COMPLETED },
     }),
   ]);
+
+  if (!alreadyCompleted) {
+    await sendInterviewCompletedEmail(interview.applicationId, { round: interview.round || 1 }).catch(() => {});
+  }
 }

@@ -13,7 +13,6 @@ import { analyzeResume } from '../../ai/resume-analyzer.service';
 import { normalizePhone } from '../../utils/phone';
 import { assertOtpToken } from './otp.service';
 import { loadPortalCompany } from './careers.service';
-import { issuePasswordToken } from '../auth/passwordToken.service';
 import { sendCandidateApplicationReceivedEmail } from '../notifications/email.service';
 import { screenApplicationById } from '../screening/screening.service';
 import { matchCvSubmission } from '../screening/bestMatch.service';
@@ -126,7 +125,7 @@ export async function submitGuestApplication({ slug, uploadId, jobId, fullName, 
   // someone else's name just by knowing their email.
   if (existingUser && (!existingUser.candidate?.phone || normalizePhone(existingUser.candidate.phone) !== phone)) {
     throw ApiError.conflict(
-      'An account with this email already exists. Please log in to apply, or use a different email.',
+      'This email was already used with a different phone number. Please use the phone number you applied with before, or a different email.',
       'EMAIL_HAS_ACCOUNT',
     );
   }
@@ -134,7 +133,7 @@ export async function submitGuestApplication({ slug, uploadId, jobId, fullName, 
     const dup = await prisma.application.findUnique({
       where: { candidateId_jobId: { candidateId: existingUser.candidate.id, jobId: job.id } },
     });
-    if (dup) throw ApiError.conflict('You have already applied to this job. Log in to track it.', 'ALREADY_APPLIED');
+    if (dup) throw ApiError.conflict('You have already applied to this job. Use the status link in your email to track it.', 'ALREADY_APPLIED');
   }
 
   const unusablePasswordHash = existingUser ? null : await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
@@ -198,16 +197,12 @@ export async function submitGuestApplication({ slug, uploadId, jobId, fullName, 
 
   const trackingToken = signTrackToken(result.kind, result.id);
 
-  // New guest, or an earlier guest who never set a password → set-password
-  // link. Someone with a real password is told to log in instead.
-  const needsPassword = !existingUser || !existingUser.passwordSet;
-  const invite = needsPassword ? await issuePasswordToken(result.user.id) : null;
+  // Candidates have no login: the email carries the personal status link.
   await sendCandidateApplicationReceivedEmail({
     to: normalizedEmail,
     fullName: result.candidate.fullName,
     companyName: company.name,
     jobTitle: job?.title,
-    link: invite?.link ?? null,
     trackUrl: trackUrl(trackingToken),
   });
 
@@ -254,9 +249,11 @@ function describeApplication(application) {
   // const instant = env.features.instantInterview
   //   ? (application.interviews || []).find((i) => !i.slotId && (i.status === 'SCHEDULED' || i.status === 'IN_PROGRESS'))
   //   : null;
-  // Second-round links work even with instant links switched off.
+  // Second-round links work even with instant links switched off, and so do
+  // /recq interview links (the agency-link flow always uses a direct link).
+  const isRecq = application.source === 'RECQ';
   const instant = (application.interviews || []).find(
-    (i) => !i.slotId && (i.status === 'SCHEDULED' || i.status === 'IN_PROGRESS') && (env.features.instantInterview || i.round > 1)
+    (i) => !i.slotId && (i.status === 'SCHEDULED' || i.status === 'IN_PROGRESS') && (env.features.instantInterview || i.round > 1 || isRecq)
   );
 
   // Slot-booking jobs: has the candidate booked (or started) a slot interview?
@@ -268,7 +265,7 @@ function describeApplication(application) {
     status: candidateFacingStatus(application.status),
     stage,
     // For the progress page: SLOT jobs offer booking from this link.
-    usesSlots: application.job.interviewFlow !== 'INSTANT',
+    usesSlots: application.job.interviewFlow !== 'INSTANT' && !isRecq,
     hasBookedSlot: Boolean(slotInterview),
     job: { id: application.job.id, title: application.job.title },
     company: { name: application.job.company.name },

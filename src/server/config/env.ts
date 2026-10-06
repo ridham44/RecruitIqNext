@@ -50,6 +50,25 @@ export const env = {
   nodeEnv,
   port: Number(process.env.PORT || 3001),
   clientUrl: process.env.CLIENT_URL || deployedOrigin || 'http://localhost:3001',
+  // Build plan P9: the public address of the live product, e.g.
+  // https://recruitiq.example.com — every link that leaves the app uses it:
+  // emailed links (interview, set password, status, login, application,
+  // Company HR submission) and the /recq links recruiters copy and share.
+  // Falls back to CLIENT_URL (which stays the CORS origin list). On Vercel
+  // without PUBLIC_APP_URL, the project's production domain is used — never
+  // a localhost CLIENT_URL left over from local development.
+  publicAppUrl: (
+    process.env.PUBLIC_APP_URL ||
+    (process.env.VERCEL
+      ? (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) || deployedOrigin
+      : null) ||
+    process.env.CLIENT_URL ||
+    deployedOrigin ||
+    'http://localhost:3001'
+  )
+    .split(',')[0]
+    .trim()
+    .replace(/\/+$/, ''),
 
   databaseUrl: required('DATABASE_URL'),
 
@@ -75,11 +94,31 @@ export const env = {
   // ever saw it.
   maxResumeSizeMb: Number(process.env.MAX_RESUME_SIZE_MB || 4),
 
-  // Phase 2 — email notifications (src/server/notifications/email). Not
-  // required: the email driver falls back to logging instead of sending
-  // when BREVO_API_KEY is unset, so nothing crashes without it configured.
+  // Phase 2 — email notifications (modules/notifications). Not required:
+  // the email driver falls back to logging instead of sending when no
+  // provider is configured, so nothing crashes without it.
+  //   EMAIL_PROVIDER = smtp | brevo | console (default: smtp once
+  //   EMAIL_SMTP_HOST is set, else brevo once BREVO_API_KEY is set, else console)
+  emailProvider: (
+    process.env.EMAIL_PROVIDER ||
+    (process.env.EMAIL_SMTP_HOST ? 'smtp' : process.env.BREVO_API_KEY ? 'brevo' : 'console')
+  )
+    .trim()
+    .toLowerCase(),
+  smtp: {
+    host: process.env.EMAIL_SMTP_HOST || '',
+    port: Number(process.env.EMAIL_SMTP_PORT || 587),
+    // EMAIL_SMTP_SECURE=true → implicit TLS (port 465). Otherwise STARTTLS is
+    // used when the server offers it.
+    secure: flag('EMAIL_SMTP_SECURE', Number(process.env.EMAIL_SMTP_PORT) === 465),
+    user: process.env.EMAIL_SMTP_USER || '',
+    pass: process.env.EMAIL_SMTP_PASS || '',
+  },
+  // Sender for every provider: EMAIL_FROM ("Name <addr>" or a bare address).
+  emailFrom: process.env.EMAIL_FROM || process.env.BREVO_FROM_EMAIL || '',
+  emailFromName: process.env.EMAIL_FROM_NAME || process.env.BREVO_FROM_NAME || 'RecruitIQ',
   brevoApiKey: process.env.BREVO_API_KEY || '',
-  brevoFromEmail: process.env.BREVO_FROM_EMAIL || '',
+  brevoFromEmail: process.env.BREVO_FROM_EMAIL || process.env.EMAIL_FROM || '',
   brevoFromName: process.env.BREVO_FROM_NAME || 'RecruitIQ',
 
   // Phase 3 — AI voice interviews. This Vercel app only ever generates
@@ -112,20 +151,38 @@ export const env = {
   // explicitly turned on per environment.
   features: {
     // P1 — when false, POST /auth/register/company returns 403 and only a
-    // Platform Admin can onboard companies. Turn off only after an admin exists.
-    allowCompanySelfRegister: flag('ALLOW_COMPANY_SELF_REGISTER', true),
+    // Platform Admin can onboard companies. Off by default: agencies are added
+    // by the Portal Admin (there is no sign-up page). Create the first admin
+    // with scripts/create-admin.mjs.
+    allowCompanySelfRegister: flag('ALLOW_COMPANY_SELF_REGISTER', false),
     // P4 — public careers portal, guest apply with phone OTP, CV-only submit.
     guestApply: flag('FEATURE_GUEST_APPLY', false),
     // P5 — instant interview link (attend now or later) instead of slot booking.
     instantInterview: flag('FEATURE_INSTANT_INTERVIEW', false),
     // P8 — client HR / hiring person portal.
     clientPortal: flag('FEATURE_CLIENT_PORTAL', false),
+    // P9 — /recq agency-link candidate flow (resume match → email OTP →
+    // interview access). The canonical public candidate journey, so it
+    // defaults ON; /careers/* redirects into it. Turn off to hide every
+    // /recq route (they answer 404, and the careers redirect goes nowhere).
+    recq: flag('FEATURE_RECQ', true),
+    // P9 (§1/§19) — the old cross-agency candidate job board: GET /jobs
+    // (every agency's open jobs), public GET /jobs/:id and logged-in
+    // POST /applications to any job. OFF by default — candidates only reach
+    // an agency's jobs through its /recq link. Legacy test scripts that
+    // exercise the old flow need it on.
+    candidateJobBoard: flag('FEATURE_CANDIDATE_JOB_BOARD', false),
     // "Start here" demo page: when on, /start shows the demo accounts'
     // password (DEMO_PASSWORD). Off → the page still lists roles and links.
     demoPage: flag('DEMO_PAGE', false),
   },
   // Password shared by the demo accounts (scripts/seed-demo.mjs).
   demoPassword: (process.env.DEMO_PASSWORD || 'Demo@123').trim(),
+  // Testing only: a fixed 6-digit code that always passes OTP verification
+  // (email OTP on /recq and phone OTP on the careers portal), alongside the
+  // real code that is still sent. Unset/empty = off. Never set it on a
+  // production instance real candidates use.
+  otpTestCode: /^\d{6}$/.test((process.env.OTP_TEST_CODE || '').trim()) ? (process.env.OTP_TEST_CODE || '').trim() : '',
 };
 
 export const isProduction = isProd;

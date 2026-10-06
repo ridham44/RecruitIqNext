@@ -93,7 +93,9 @@ npm run build
 
 if [ "${SKIP_MIGRATE:-0}" != "1" ]; then
   log "Applying database migrations"
-  npx prisma migrate deploy
+  # Plain `prisma migrate deploy`, plus the one-time switch to the squashed
+  # baseline for databases created with the old migration history.
+  node scripts/migrate-deploy.mjs
 fi
 
 mkdir -p uploads logs

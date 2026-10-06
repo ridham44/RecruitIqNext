@@ -48,8 +48,8 @@ const tokenFrom = (link) => new URL(link).searchParams.get('token');
 
 async function selfRegisterDisabledCheck() {
   const port = 3000 + Math.floor(Math.random() * 900) + 50;
-  const code = `import('./src/server/app.js').then(({ createApp }) => createApp().listen(${port}, () => console.log('READY')))`;
-  const child = spawn(process.execPath, ['-e', code], {
+  const code = `import('./src/server/standalone.ts').then(({ listen }) => listen(${port}, () => console.log('READY')))`;
+  const child = spawn(process.execPath, ['--import', 'tsx', '-e', code], {
     env: { ...process.env, ALLOW_COMPANY_SELF_REGISTER: 'false', PORT: String(port) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

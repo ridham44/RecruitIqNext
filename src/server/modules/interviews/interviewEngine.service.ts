@@ -4,6 +4,7 @@ import { PLANNED_QUESTION_STAGES } from '../../../shared/constants/statuses';
 import { getOwnedJob } from '../jobs/jobs.service';
 import { getEffectiveConfig, resolveTtsVoiceId } from './interviewConfig.service';
 import { createInterviewToken } from './livekit.service';
+import { interviewAccessBlocker } from './interviewAccess.util';
 import { generateInterviewQuestion } from '../../ai/interview-question-generator.service';
 import { evaluateAnswer } from '../../ai/interview-answer-evaluator.service';
 import { generateInterviewReport, computeResumeAlignment } from '../../ai/interview-report-generator.service';
@@ -13,6 +14,7 @@ import { sanitizeRecruiterGuidance } from '../../ai/sanitize.util';
 import { generateClosingReply } from '../../ai/interview-closing.service';
 import { computeFinalScore } from '../submissions/finalScore.service';
 import { autoSubmit } from '../submissions/submissions.service';
+import { sendInterviewCompletedEmail } from '../notifications/email.service';
 
 const STAGE_QUESTION_TYPE = {
   RESUME_QUESTIONS: 'RESUME_BASED',
@@ -270,6 +272,12 @@ export async function startInterview(userId, interviewId) {
     throw ApiError.badRequest('This interview is no longer active', 'INTERVIEW_NOT_ACTIVE');
   }
 
+  // Build plan P9: the same access rules as the interview link (suspended
+  // agency, /recq interview window), so a normally logged-in candidate can't
+  // bypass them by calling start directly. Never blocks an IN_PROGRESS rejoin.
+  const access = interviewAccessBlocker(interview);
+  if (access) throw ApiError.badRequest(access.message, access.code);
+
   // First join only — a candidate already IN_PROGRESS is reconnecting
   // (dropped connection, refresh) and must always be let back in regardless
   // of the slot window, or a flaky connection would lock them out mid-interview.
@@ -526,10 +534,13 @@ export async function finalizeInterview(interviewId) {
   const interview = await loadInterviewContext(interviewId);
   if (interview.status === 'COMPLETED') return { done: true, stage: 'END' };
 
-  await prisma.interview.update({
-    where: { id: interviewId },
+  // Conditional, so two simultaneous ends (candidate clicks End as the last
+  // answer lands) complete it — and email the candidate — only once.
+  const { count } = await prisma.interview.updateMany({
+    where: { id: interviewId, status: { not: 'COMPLETED' } },
     data: { status: 'COMPLETED', stage: 'END', endedAt: new Date() },
   });
+  if (count === 0) return { done: true, stage: 'END' };
   await prisma.interviewEvent.create({ data: { interviewId, type: 'INTERVIEW_ENDED' } });
   // await prisma.application.update({
   //   where: { id: interview.applicationId },
@@ -549,6 +560,11 @@ export async function finalizeInterview(interviewId) {
   // execution continues after the response is sent, so the report is
   // generated synchronously here — same pattern screening.service.js uses.
   await generateFinalReport(interviewId).catch((err) => console.error('[interviews] report generation failed:', err.message));
+
+  // Candidates have no login — tell them by email that it went through.
+  await sendInterviewCompletedEmail(interview.applicationId, { round: interview.round || 1 }).catch((err) =>
+    console.error('[interviews] completion email failed:', err.message)
+  );
 
   return { done: true, stage: 'END' };
 }

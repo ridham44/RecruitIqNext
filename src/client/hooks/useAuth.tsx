@@ -9,8 +9,6 @@ export interface AuthContextValue {
   setUser: Dispatch<SetStateAction<any | null>>;
   loading: boolean;
   login: (email: string, password: string) => Promise<any>;
-  registerCompany: (payload: any) => Promise<any>;
-  registerCandidate: (payload: any) => Promise<any>;
   setPasswordWithToken: (token: string, password: string) => Promise<any>;
   logout: () => Promise<void>;
 }
@@ -47,20 +45,6 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
     return user;
   };
 
-  const registerCompany = async (payload) => {
-    const { user, token } = await api.post('/auth/register/company', payload);
-    setToken(token);
-    setUser(user);
-    return user;
-  };
-
-  const registerCandidate = async (payload) => {
-    const { user, token } = await api.post('/auth/register/candidate', payload);
-    setToken(token);
-    setUser(user);
-    return user;
-  };
-
   // Build plan P1: invite link → choose a password → logged straight in.
   const setPasswordWithToken = async (token: string, password: string) => {
     const { user, token: jwt } = await api.post('/auth/set-password', { token, password });
@@ -81,7 +65,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   // <AuthContext.Provider value={{ user, setUser, loading, login, registerCompany, registerCandidate, logout }}>
   return (
     <AuthContext.Provider
-      value={{ user, setUser, loading, login, registerCompany, registerCandidate, setPasswordWithToken, logout }}
+      value={{ user, setUser, loading, login, setPasswordWithToken, logout }}
     >
       {children}
     </AuthContext.Provider>

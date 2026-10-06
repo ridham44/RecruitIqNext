@@ -270,7 +270,6 @@ export default function CareersTrackPage() {
   const [params] = useSearchParams();
   const token = params.get('token') || '';
   const slug = params.get('slug') || '';
-  const account = params.get('account') || '';
   const [status, setStatus] = useState(null);
   const [error, setError] = useState('');
   const [timedOut, setTimedOut] = useState(false);
@@ -416,19 +415,11 @@ export default function CareersTrackPage() {
       {!error && (
         <Card className="mt-4 flex items-start gap-3 p-4 text-sm text-slate-600">
           <MailCheck className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
-          <div>
-            {account === 'existing' ? (
-              <p>
-                You already have a RecruitIQ account with this email.{' '}
-                <Link href="/auth/login" className="font-medium text-brand-600 hover:underline">
-                  Log in
-                </Link>{' '}
-                to track your applications.
-              </p>
-            ) : (
-              <p>We've emailed you a link to set a password, so you can track this application and attend interviews from your account.</p>
-            )}
-          </div>
+          {/* Candidates have no login: every update comes by email. */}
+          <p>
+            We'll email you at every step — your interview link and each status update. This page is your personal status
+            link: bookmark it to check your progress any time, no login needed.
+          </p>
         </Card>
       )}
 

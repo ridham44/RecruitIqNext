@@ -98,26 +98,15 @@ export async function registerCompany({ email, password, companyName, website, i
   return { user: serializeUser(user), token: signToken(user) };
 }
 
-export async function registerCandidate({ email, password, fullName, phone, location }) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-  if (existing) throw ApiError.conflict('An account with this email already exists', 'EMAIL_TAKEN');
+// Candidates have no RecruitIQ login: they apply through an agency's /recq
+// link, verify with an email code, and get the interview link and every
+// status update by email (with a personal no-login status link).
+export const CANDIDATE_NO_LOGIN_MESSAGE =
+  "Candidates don't sign in to RecruitIQ. Your verification code, interview link and status updates all come to your email.";
+export const candidateNoLogin = () => ApiError.forbidden(CANDIDATE_NO_LOGIN_MESSAGE, 'CANDIDATE_NO_LOGIN');
 
-  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-
-  const user = await prisma.user.create({
-    data: {
-      email: normalizedEmail,
-      passwordHash,
-      role: ROLES.CANDIDATE,
-      candidate: {
-        create: { fullName, phone: phone || null, location: location || null },
-      },
-    },
-    include: { candidate: true },
-  });
-
-  return { user: serializeUser(user), token: signToken(user) };
+export async function registerCandidate(_input?: unknown): Promise<never> {
+  throw candidateNoLogin();
 }
 
 export async function login({ email, password }) {
@@ -138,7 +127,9 @@ export async function login({ email, password }) {
   }
 
   // Build plan P1: checked only after the password matches, so a wrong
-  // password never reveals whether a company is suspended.
+  // password never reveals whether a company is suspended (or that the
+  // email belongs to a candidate).
+  if (user.role === ROLES.CANDIDATE) throw candidateNoLogin();
   assertCompanyNotSuspended(user);
 
   return { user: serializeUser(user), token: signToken(user) };
@@ -178,7 +169,8 @@ const RESET_LIMIT = { count: 3, windowMs: 15 * 60 * 1000 };
 
 export async function requestPasswordReset({ email }) {
   const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() }, include: USER_AUTH_INCLUDE });
-  if (!user || !user.isActive) return;
+  // Candidates have no password to reset.
+  if (!user || !user.isActive || user.role === ROLES.CANDIDATE) return;
   try {
     assertCompanyNotSuspended(user);
   } catch {
@@ -198,6 +190,8 @@ export async function requestPasswordReset({ email }) {
 // account the link is for before they choose a password.
 export async function getPasswordTokenInfo(token) {
   const row = await findUsableToken(token);
+  // Set-password links sent to candidates before logins were removed.
+  if (row.user.role === ROLES.CANDIDATE) throw candidateNoLogin();
   return {
     email: row.user.email,
     role: row.user.role,
@@ -215,6 +209,7 @@ export async function getPasswordTokenInfo(token) {
 // even if it's submitted twice at the same moment.
 export async function setPasswordWithToken({ token, password }) {
   const row = await findUsableToken(token);
+  if (row.user.role === ROLES.CANDIDATE) throw candidateNoLogin();
   if (!row.user.isActive) throw ApiError.forbidden('This account is inactive', 'ACCOUNT_INACTIVE');
   assertCompanyNotSuspended(row.user);
 

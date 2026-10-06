@@ -47,7 +47,7 @@ other demographic data is never sent to it (see [AI & screening](#ai--screening)
 | `ADMIN`       | Portal Admin     | Created by script only                            | `/admin/companies`     |
 | `COMPANY`     | Agency owner     | Owns the agency — every permission                | `/company/dashboard`   |
 | `RECRUITER`   | Agency recruiter | Invited by the owner — permissions + assigned jobs/companies only | `/company/dashboard` |
-| `CANDIDATE`   | Candidate        | Job seeker (registered or guest)                  | `/candidate/dashboard` |
+| `CANDIDATE`   | Candidate        | Job seeker — no login; everything by email        | — (no login)           |
 | `CLIENT_HR`   | Company HR       | HR / hiring person at the agency's client company | `/client/candidates`   |
 
 Recruiter permissions (`src/shared/constants/permissions.ts`): `MANAGE_JOBS`, `VIEW_CANDIDATES`,
@@ -84,7 +84,7 @@ final score or the post-interview statuses — they see `INTERVIEW_COMPLETED`.
 | Database   | PostgreSQL via Prisma ORM (any provider; built/tested on Neon)    |
 | AI         | OpenRouter — model set entirely by env var, never hard-coded      |
 | Auth       | JWT (Bearer token) + bcrypt — stateless, no cookies/sessions      |
-| Email      | Brevo transactional API, with a console-log fallback when unset   |
+| Email      | SMTP (nodemailer) or Brevo, with a console-log fallback when unset |
 | SMS (OTP)  | Console driver by default, Twilio optional                        |
 | Voice      | LiveKit (room/transport) + Deepgram (STT + TTS) — separate worker |
 | Validation | Zod schemas shared between client and server                      |
@@ -99,7 +99,7 @@ Next.js (Vercel or `next start`)
   └── API ── src/app/api/[...path]/route.ts → src/server/app.ts router tree
         ├── Postgres (Prisma)
         ├── OpenRouter (AI)
-        ├── Brevo (email) / Twilio (SMS OTP, optional)
+        ├── SMTP / Brevo (email) / Twilio (SMS OTP, optional)
         └── LiveKit (token generation only — never joins a room)
 
 Not part of this Vercel project — a separate long-running process:
@@ -168,8 +168,9 @@ tests/unit/               node:test unit tests
 ## Notifications & interview scheduling (Phase 2)
 
 - An application becoming `SHORTLISTED` or `REJECTED` triggers an email via
-  `src/server/modules/notifications/email.service.ts`. Driver is `brevo` when `BREVO_API_KEY` is set,
-  else `console` (logs instead of sending). Every attempt is logged to `EmailLog`.
+  `src/server/modules/notifications/email.service.ts`. Driver is `EMAIL_PROVIDER` (`smtp` | `brevo` | `console`);
+  unset, it is `smtp` when `EMAIL_SMTP_HOST` is set, else `brevo` when `BREVO_API_KEY` is set, else `console`
+  (logs instead of sending). Every attempt is logged to `EmailLog`.
 - A company creates `InterviewSlot`s for a job — one at a time, or via **Create AI Interview Slots**
   (time range + duration + optional buffer, e.g. 10:00–13:00 at 15 minutes → 12 slots, skipping
   overlaps). Booking is an atomic conditional update (`AVAILABLE` → `BOOKED`), so two candidates racing
@@ -264,7 +265,7 @@ Everything else has a safe default — see the comments in `.env.example`:
 | Group | Variables |
 | ----- | --------- |
 | Server / storage | `PORT`, `CLIENT_URL`, `STORAGE_DRIVER`, `UPLOAD_DIR`, `MAX_RESUME_SIZE_MB` |
-| Email | `BREVO_API_KEY`, `BREVO_FROM_EMAIL`, `BREVO_FROM_NAME`, `EMAIL_PROVIDER` |
+| Email | `EMAIL_PROVIDER`, `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`, `EMAIL_FROM`, or `BREVO_*` |
 | AI voice interviews | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `INTERVIEW_WORKER_SECRET`, `DEEPGRAM_API_KEY` |
 | SMS OTP | `SMS_DRIVER` (`console` / `twilio`), `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `DEFAULT_PHONE_COUNTRY_CODE` (`+91`) |
 | Feature flags | `ALLOW_COMPANY_SELF_REGISTER` (default `true`), `FEATURE_GUEST_APPLY`, `FEATURE_INSTANT_INTERVIEW`, `FEATURE_CLIENT_PORTAL` (default `false`) |
@@ -357,6 +358,19 @@ npx tsx scripts/restore-db.mjs backups/<folder> [--data-only]  # onto a NEW, EMP
 
 ## Database notes
 
+- **One baseline migration.** `prisma/migrations/20261006000000_init` creates the whole schema; the earlier
+  step-by-step history was folded into it. A new, empty database just runs `npx prisma migrate deploy`.
+  A database that already has the old history (any `_prisma_migrations` rows from before the baseline) is
+  moved onto it once — back it up first, then:
+  ```bash
+  # 1. bring the tables up to schema.prisma (check the printed SQL is additive before running it)
+  npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script > delta.sql
+  npx prisma db execute --file delta.sql --schema prisma/schema.prisma
+  # 2. replace the old history with the baseline
+  psql "$DATABASE_URL" -c 'DELETE FROM _prisma_migrations'
+  npx prisma migrate resolve --applied 20261006000000_init
+  npx prisma migrate status   # → "Database schema is up to date!"
+  ```
 - **Back up before a migration** on the shared database: `npx tsx scripts/backup-db.mjs before-<change>`.
 - **Use `prisma migrate deploy`, not `migrate dev`, on the shared Neon database.** The live database still
   has columns and enums from the reverted telephonic-interview feature (`interviews.mode`, `callStatus`,

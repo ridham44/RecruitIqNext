@@ -75,6 +75,14 @@ export const authenticate = asyncHandler(async (req: Req, res: Res, next: Next) 
   if (!account || !account.isActive) {
     throw ApiError.unauthorized('Your account is inactive or no longer exists', 'ACCOUNT_INACTIVE');
   }
+  // Candidates have no login. The only candidate session is the one an
+  // interview link opens, limited to that interview (checked above).
+  if (account.role === 'CANDIDATE' && !isInterviewSession) {
+    throw ApiError.unauthorized(
+      "Candidates don't sign in to RecruitIQ. Your interview link and status updates come to your email.",
+      'CANDIDATE_NO_LOGIN'
+    );
+  }
   if (account.role === 'RECRUITER' && !account.membership?.isActive) {
     throw ApiError.unauthorized('Your account is inactive or no longer exists', 'ACCOUNT_INACTIVE');
   }

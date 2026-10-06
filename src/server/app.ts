@@ -19,6 +19,7 @@ import cvPoolRoutes from './modules/cvPool/cvPool.routes';
 import interviewLinkRoutes from './modules/interviews/interviewLink.routes';
 import submissionsRoutes, { publicSubmissionRoutes } from './modules/submissions/submissions.routes';
 import clientPortalRoutes from './modules/clientPortal/clientPortal.routes';
+import recqRoutes from './modules/recq/recq.routes';
 
 // The whole API as one router tree, served by the Next.js Route Handler in
 // src/app/api/[...path]/route.ts (which also does CORS, the 404 and the
@@ -62,6 +63,8 @@ export function createApp() {
   // Build plan P4
   v1.use('/public', publicRoutes);
   v1.use('/cv-pool', cvPoolRoutes);
+  // Build plan P9 — /recq agency-link candidate flow (own FEATURE_RECQ gate).
+  v1.use('/recq', recqRoutes);
 
   app.use('/api/v1', v1);
 

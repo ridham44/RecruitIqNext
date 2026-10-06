@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { FileText, Search, CheckCircle2, CalendarClock, User } from 'lucide-react';
+import { FileText, CheckCircle2, CalendarClock, User } from 'lucide-react';
 import { applicationsApi } from '../../services/applications';
 import { candidateProfileApi } from '../../services/profile';
 import { useAuth } from '../../hooks/useAuth';
 import Card from '../../components/ui/Card';
-import Button from '../../components/ui/Button';
 import LoadingState from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
 import StatusBadge from '../../components/ui/StatusBadge';
@@ -91,13 +90,8 @@ export default function CandidateDashboardPage() {
           <h2 className="text-xl font-semibold text-slate-900">
             Welcome{user?.candidate?.fullName ? `, ${user.candidate.fullName.split(' ')[0]}` : ''}
           </h2>
-          <p className="text-sm text-slate-500">Track your applications and discover new roles.</p>
+          <p className="text-sm text-slate-500">Track your applications and interviews.</p>
         </div>
-        <Link href="/candidate/jobs">
-          <Button>
-            <Search className="h-4 w-4" /> Find Jobs
-          </Button>
-        </Link>
       </div>
 
       {/* Stat cards */}

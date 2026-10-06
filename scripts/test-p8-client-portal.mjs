@@ -53,8 +53,8 @@ const step = (t) => console.log(`\n== ${t} ==`);
 const tokenOf = (link) => new URL(link).searchParams.get('token');
 
 async function startServer() {
-  const code = `import('./src/server/app.js').then(({ createApp }) => createApp().listen(${PORT}, () => console.log('READY')))`;
-  const child = spawn(process.execPath, ['-e', code], {
+  const code = `import('./src/server/standalone.ts').then(({ listen }) => listen(${PORT}, () => console.log('READY')))`;
+  const child = spawn(process.execPath, ['--import', 'tsx', '-e', code], {
     env: { ...process.env, FEATURE_CLIENT_PORTAL: 'true', NODE_ENV: 'development' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
