@@ -1,6 +1,38 @@
 # Database migration — live server
 
-Run these on the server, one by one.
+## Script to run on the server
+
+Script: `scripts/migrate-live.sh`
+
+### 1. Go to the project folder
+
+```bash
+cd /path/to/RecruitIqNext
+```
+
+### 2. Pull the latest code
+
+```bash
+git pull
+```
+
+### 3. Make the script executable (first time only)
+
+```bash
+chmod +x scripts/migrate-live.sh
+```
+
+### 4. Run the script
+
+```bash
+PULL=1 ./scripts/migrate-live.sh
+```
+
+Type `y` when it asks `Apply migrations to this database? [y/N]`.
+
+---
+
+## Or run the commands one by one
 
 ### 1. Go to the project folder
 
