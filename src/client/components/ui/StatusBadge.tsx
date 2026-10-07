@@ -46,7 +46,8 @@ const LABELS: Record<string, string> = {
 export default function StatusBadge({ status }: { status?: string | null }) {
   const style = STYLES[status] || 'bg-slate-100 text-slate-700';
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${style}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${style}`}>
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true" />
       {/* {status?.toLowerCase().replace(/_/g, ' ')} */}
       {LABELS[status] || status?.toLowerCase().replace(/_/g, ' ')}
     </span>

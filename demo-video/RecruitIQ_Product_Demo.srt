@@ -1,0 +1,584 @@
+1
+00:00:00,500 --> 00:00:05,529
+Welcome to RecruitIQ, an AI recruitment platform built for recruitment
+
+2
+00:00:05,549 --> 00:00:06,572
+agencies.
+
+3
+00:00:08,270 --> 00:00:11,683
+Agencies hire on behalf of their client companies.
+
+4
+00:00:12,252 --> 00:00:15,994
+Screening hundreds of resumes and scheduling first-round interviews
+
+5
+00:00:16,014 --> 00:00:20,444
+by hand is slow, and good candidates are often lost along the way.
+
+6
+00:00:21,670 --> 00:00:24,727
+RecruitIQ automates that first round.
+
+7
+00:00:25,296 --> 00:00:27,949
+The agency shares one private link.
+
+8
+00:00:28,495 --> 00:00:32,188
+Candidates upload a resume, see their match instantly,
+
+9
+00:00:32,208 --> 00:00:35,840
+verify their email, and take an AI voice interview,
+
+10
+00:00:35,860 --> 00:00:39,359
+while recruiters simply review the reports and decide.
+
+11
+00:00:40,500 --> 00:00:43,176
+The platform is run by a Portal Admin,
+
+12
+00:00:43,196 --> 00:00:45,726
+who onboards recruitment agencies.
+
+13
+00:00:46,259 --> 00:00:50,369
+There is no public sign-up, and the admin can suspend or reactivate
+
+14
+00:00:50,389 --> 00:00:51,681
+any agency.
+
+15
+00:00:52,830 --> 00:00:55,825
+Let's sign in as Nexora Talent Partners,
+
+16
+00:00:55,845 --> 00:00:57,321
+a demo agency.
+
+17
+00:01:01,460 --> 00:01:04,418
+The dashboard shows what needs attention today:
+
+18
+00:01:04,438 --> 00:01:07,555
+open jobs, total candidates, interviews,
+
+19
+00:01:07,575 --> 00:01:09,628
+and the average interview score.
+
+20
+00:01:13,760 --> 00:01:18,005
+The candidate pipeline shows how many applicants are at each stage,
+
+21
+00:01:18,025 --> 00:01:21,963
+and Recent AI Interviews lists every completed interview,
+
+22
+00:01:21,983 --> 00:01:25,394
+with its overall, technical and communication scores,
+
+23
+00:01:25,414 --> 00:01:27,320
+and a security status.
+
+24
+00:01:28,490 --> 00:01:32,968
+From the sidebar, the agency also manages its client companies,
+
+25
+00:01:32,988 --> 00:01:35,578
+with their departments and HR contacts,
+
+26
+00:01:35,598 --> 00:01:37,649
+and its own team of recruiters,
+
+27
+00:01:37,669 --> 00:01:39,672
+each with their own permissions.
+
+28
+00:01:43,790 --> 00:01:48,646
+Now let's post a new job. The recruiter only needs a title and a
+
+29
+00:01:48,666 --> 00:01:51,381
+description, written in plain language.
+
+30
+00:01:56,520 --> 00:01:59,025
+This role is for the agency's client,
+
+31
+00:01:59,045 --> 00:02:02,762
+Finlytics Software, and is linked to their HR contact,
+
+32
+00:02:02,782 --> 00:02:05,484
+who will later receive the best candidates.
+
+33
+00:02:06,780 --> 00:02:10,620
+Clicking Auto-fill details from description sends the text to the
+
+34
+00:02:10,640 --> 00:02:14,335
+AI, which extracts the structured job details.
+
+35
+00:02:15,480 --> 00:02:18,217
+Within seconds, work mode, openings,
+
+36
+00:02:18,237 --> 00:02:21,036
+experience, salary, notice period,
+
+37
+00:02:21,056 --> 00:02:23,842
+location, required and preferred skills,
+
+38
+00:02:23,862 --> 00:02:26,564
+languages and education are filled in.
+
+39
+00:02:27,121 --> 00:02:29,859
+Each one is marked as filled from the description,
+
+40
+00:02:29,879 --> 00:02:33,046
+so the recruiter can review and correct anything.
+
+41
+00:02:34,240 --> 00:02:37,431
+One click on Publish job, and the role is live,
+
+42
+00:02:37,451 --> 00:02:39,332
+with its own shareable link.
+
+43
+00:02:43,470 --> 00:02:46,625
+Every job has an Interviews and setup page.
+
+44
+00:02:47,170 --> 00:02:49,822
+Here the recruiter copies the candidate link,
+
+45
+00:02:49,842 --> 00:02:53,277
+for this job or for all of the agency's open roles,
+
+46
+00:02:53,297 --> 00:02:56,048
+and can optionally set an interview window.
+
+47
+00:02:57,230 --> 00:03:00,188
+The AI interviewer is fully configurable:
+
+48
+00:03:00,208 --> 00:03:03,717
+its name and title, voice, the number of questions,
+
+49
+00:03:03,737 --> 00:03:06,182
+and the time allowed for each answer.
+
+50
+00:03:07,360 --> 00:03:11,641
+Recruiters can add custom questions the AI must always ask,
+
+51
+00:03:11,661 --> 00:03:15,258
+skills it must cover, and evaluation criteria.
+
+52
+00:03:15,815 --> 00:03:19,839
+The interview report will later mark each criterion as met,
+
+53
+00:03:19,859 --> 00:03:22,144
+partly met, or not met.
+
+54
+00:03:23,320 --> 00:03:27,136
+On the Applications page, the recruiter sets the minimum resume
+
+55
+00:03:27,156 --> 00:03:29,109
+match needed to get an interview,
+
+56
+00:03:29,129 --> 00:03:31,929
+and how the final score is calculated.
+
+57
+00:03:32,461 --> 00:03:36,657
+Here, it is thirty percent CV match and seventy percent interview,
+
+58
+00:03:36,677 --> 00:03:39,207
+with a qualifying threshold of seventy.
+
+59
+00:03:40,420 --> 00:03:43,012
+Now let's switch to the candidate's side.
+
+60
+00:03:43,569 --> 00:03:46,234
+A candidate opens the agency's link.
+
+61
+00:03:46,779 --> 00:03:49,124
+There is no login and no account,
+
+62
+00:03:49,144 --> 00:03:51,491
+just the agency's open roles.
+
+63
+00:03:52,750 --> 00:03:57,692
+Not sure which role fits? The candidate uploads a resume once,
+
+64
+00:03:57,712 --> 00:04:00,561
+and RecruitIQ finds the matching roles.
+
+65
+00:04:05,710 --> 00:04:10,310
+The AI reads the resume and scores it against the agency's best-fitting
+
+66
+00:04:10,330 --> 00:04:14,380
+open roles, checking skills, experience and education.
+
+67
+00:04:15,540 --> 00:04:19,772
+Kavya, a full-stack developer, is a one hundred percent match for
+
+68
+00:04:19,792 --> 00:04:24,492
+MERN Stack Developer, and also qualifies for two other roles.
+
+69
+00:04:25,049 --> 00:04:28,436
+Roles below the minimum score are marked Not eligible,
+
+70
+00:04:28,456 --> 00:04:30,190
+and cannot be selected.
+
+71
+00:04:31,370 --> 00:04:34,979
+She applies for the MERN Stack Developer role.
+
+72
+00:04:39,570 --> 00:04:42,994
+To make sure only the resume's real owner can apply,
+
+73
+00:04:43,014 --> 00:04:47,186
+a six-digit code is sent to the email address written on the resume.
+
+74
+00:04:47,731 --> 00:04:50,604
+The candidate never types an email address.
+
+75
+00:04:51,770 --> 00:04:54,153
+She enters the code from her email,
+
+76
+00:04:57,470 --> 00:05:00,344
+and her interview link is ready immediately.
+
+77
+00:05:00,900 --> 00:05:03,860
+No shortlisting delay, and no scheduling.
+
+78
+00:05:04,405 --> 00:05:07,438
+The same link is also sent to her by email.
+
+79
+00:05:08,600 --> 00:05:11,937
+What if a resume doesn't fit? Here,
+
+80
+00:05:11,957 --> 00:05:15,578
+a customer support resume is uploaded for the same job.
+
+81
+00:05:16,730 --> 00:05:19,002
+Its match is only nineteen percent,
+
+82
+00:05:19,022 --> 00:05:21,109
+below the requirement for this job,
+
+83
+00:05:21,129 --> 00:05:23,317
+so the candidate cannot continue.
+
+84
+00:05:23,861 --> 00:05:28,438
+No application is created, so recruiters never have to screen it.
+
+85
+00:05:29,590 --> 00:05:34,201
+Back to Kavya. Her interview link opens a short checklist:
+
+86
+00:05:34,221 --> 00:05:38,651
+camera on, a quiet room, and about twenty to thirty minutes.
+
+87
+00:05:39,820 --> 00:05:43,525
+In the interview room, she checks her camera and microphone,
+
+88
+00:05:43,545 --> 00:05:47,864
+and joins. The camera is used for presence only.
+
+89
+00:05:48,422 --> 00:05:50,511
+Nothing is recorded or stored.
+
+90
+00:05:55,850 --> 00:06:00,663
+Ananya (AI interviewer): Hi Kavya, I'm Ananya, Senior Technical Recruiter at Nexora Talent
+
+91
+00:06:00,683 --> 00:06:04,471
+Partners. Thanks for joining â€” let's get started.
+
+92
+00:06:04,491 --> 00:06:10,210
+Could you briefly introduce yourself and walk me through your background?
+
+93
+00:06:10,510 --> 00:06:15,490
+The AI interviewer, Ananya, greets her by name and asks each question
+
+94
+00:06:15,510 --> 00:06:19,020
+aloud. Kavya answers by speaking.
+
+95
+00:06:19,565 --> 00:06:22,266
+Her answer is transcribed live on screen,
+
+96
+00:06:22,286 --> 00:06:24,865
+and she presses Send when she is done.
+
+97
+00:06:26,010 --> 00:06:29,274
+Each question is generated from the job description,
+
+98
+00:06:29,294 --> 00:06:32,156
+her resume, and her earlier answers.
+
+99
+00:06:32,700 --> 00:06:35,425
+The number of questions is fixed by the system,
+
+100
+00:06:35,445 --> 00:06:38,833
+and the difficulty adapts to how well she answers.
+
+101
+00:06:40,000 --> 00:06:42,088
+When an answer needs more depth,
+
+102
+00:06:42,108 --> 00:06:44,563
+the AI asks a follow-up question,
+
+103
+00:06:44,583 --> 00:06:45,913
+like this one.
+
+104
+00:06:47,080 --> 00:06:50,295
+Throughout the interview, events like tab switches,
+
+105
+00:06:50,315 --> 00:06:54,278
+camera and microphone changes, and connection drops are logged for
+
+106
+00:06:54,298 --> 00:06:55,860
+a security audit.
+
+107
+00:06:57,010 --> 00:07:00,349
+At the end, Kavya can ask her own questions.
+
+108
+00:07:00,894 --> 00:07:05,188
+The AI answers using only the job and company information,
+
+109
+00:07:05,208 --> 00:07:07,186
+and then closes the interview.
+
+110
+00:07:08,330 --> 00:07:13,040
+As soon as the interview ends, RecruitIQ writes the report and calculates
+
+111
+00:07:13,060 --> 00:07:16,986
+the final score. Back on the agency side,
+
+112
+00:07:17,005 --> 00:07:19,314
+Kavya now ranks first for this job,
+
+113
+00:07:19,334 --> 00:07:22,990
+with her resume match, interview score and final score,
+
+114
+00:07:23,010 --> 00:07:26,227
+and she has been automatically marked Qualified.
+
+115
+00:07:31,330 --> 00:07:35,281
+Here is her interview report: an overall score of ninety,
+
+116
+00:07:35,301 --> 00:07:38,111
+with separate technical and communication scores,
+
+117
+00:07:38,131 --> 00:07:42,194
+a written summary, strengths, and areas for improvement.
+
+118
+00:07:48,330 --> 00:07:52,477
+Each of the recruiter's evaluation criteria is assessed as met,
+
+119
+00:07:52,497 --> 00:07:56,559
+partly met, or not met, with evidence from the interview.
+
+120
+00:07:57,790 --> 00:08:01,667
+The full transcript is kept, with a score for every answer,
+
+121
+00:08:01,687 --> 00:08:05,075
+along with the interview and security event log.
+
+122
+00:08:09,220 --> 00:08:11,774
+Her candidate page brings it all together:
+
+123
+00:08:11,794 --> 00:08:15,536
+a CV match of one hundred, an interview score of ninety,
+
+124
+00:08:15,556 --> 00:08:17,754
+and a final score of ninety-three,
+
+125
+00:08:17,774 --> 00:08:21,076
+with matched and missing skills and the AI's reasoning.
+
+126
+00:08:21,621 --> 00:08:25,155
+For fairness, the AI never sees a candidate's name,
+
+127
+00:08:25,175 --> 00:08:28,343
+gender or other personal details when scoring.
+
+128
+00:08:31,680 --> 00:08:35,938
+Kavya is a strong fit, so the recruiter clicks Submit to company.
+
+129
+00:08:36,495 --> 00:08:39,871
+The preview shows exactly what the client will receive.
+
+130
+00:08:40,417 --> 00:08:43,620
+The recruiter confirms Finlytics' HR contact,
+
+131
+00:08:43,640 --> 00:08:46,305
+adds a note, and sends the package.
+
+132
+00:08:51,440 --> 00:08:55,280
+The client's HR contact signs in to the Company HR portal,
+
+133
+00:08:55,300 --> 00:08:58,333
+and sees only the candidates submitted to them.
+
+134
+00:09:02,900 --> 00:09:06,287
+They can review the scores, the interview evaluation,
+
+135
+00:09:06,307 --> 00:09:08,836
+the hiring criteria and each question,
+
+136
+00:09:08,856 --> 00:09:11,618
+view or download the CV, and if needed,
+
+137
+00:09:11,638 --> 00:09:13,972
+request a second-round interview.
+
+138
+00:09:22,130 --> 00:09:27,024
+Back on the agency side, Kavya's status is now Submitted to Company,
+
+139
+00:09:27,044 --> 00:09:30,284
+and the submission history records who received the package,
+
+140
+00:09:30,304 --> 00:09:31,829
+and when it was viewed.
+
+141
+00:09:33,290 --> 00:09:38,612
+So that's RecruitIQ. One private link replaces manual first-round
+
+142
+00:09:38,632 --> 00:09:43,453
+screening. AI resume matching filters applicants instantly,
+
+143
+00:09:43,473 --> 00:09:47,203
+verified candidates take an adaptive AI voice interview,
+
+144
+00:09:47,223 --> 00:09:51,382
+and recruiters get clear, evidence-based reports to submit the best
+
+145
+00:09:51,402 --> 00:09:53,319
+candidates to their clients.
+
+146
+00:09:54,760 --> 00:10:00,500
+RecruitIQ. Hire faster with AI resume matching and voice interviews.
+

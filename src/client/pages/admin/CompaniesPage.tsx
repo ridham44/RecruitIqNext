@@ -10,9 +10,11 @@ import LoadingState from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/ui/EmptyState';
 import StatusBadge from '../../components/ui/StatusBadge';
+import Pagination from '../../components/ui/Pagination';
 import { inputClass } from '../../components/ui/FormField';
 
 const formatDate = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+const PAGE_SIZE = 10;
 
 // Build plan P1 — every Recruitment Company on the platform.
 export default function CompaniesPage() {
@@ -20,6 +22,7 @@ export default function CompaniesPage() {
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
+  const [page, setPage] = useState(1);
 
   const load = (params = { q, status }) => {
     setError('');
@@ -32,11 +35,20 @@ export default function CompaniesPage() {
   // Debounced search so typing doesn't fire a request per keystroke.
   useEffect(() => {
     const t = setTimeout(() => load({ q, status }), 250);
+    setPage(1);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, status]);
 
   const filtered = Boolean(q || status);
+  const totalPages = companies ? Math.max(1, Math.ceil(companies.length / PAGE_SIZE)) : 1;
+  const currentPage = Math.min(page, totalPages);
+  const pageCompanies = companies ? companies.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE) : [];
+  const goToPage = (p) => {
+    setPage(Math.min(Math.max(1, p), totalPages));
+    document.getElementById('agencies-list')?.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <div>
@@ -96,7 +108,7 @@ export default function CompaniesPage() {
         <>
           {/* Mobile: cards */}
           <div className="space-y-3 md:hidden">
-            {companies.map((c) => (
+            {pageCompanies.map((c) => (
               <Link key={c.id} href={`/admin/companies/${c.id}`} className="block">
                 <Card className="p-4 active:bg-slate-50">
                   <div className="flex items-start justify-between gap-3">
@@ -117,9 +129,10 @@ export default function CompaniesPage() {
           </div>
 
           {/* Tablet/desktop: table */}
-          <Card className="hidden overflow-x-auto md:block">
+          {/* Scrolls inside the card (both directions) with the header kept in view */}
+          <Card id="agencies-list" className="hidden max-h-[calc(100vh-18rem)] min-h-[16rem] overflow-auto md:block">
             <table className="w-full min-w-[640px] text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 shadow-[0_1px_0_0_theme(colors.slate.200)]">
                 <tr>
                   <th className="px-5 py-3">Agency</th>
                   <th className="px-5 py-3">Agency owner</th>
@@ -130,7 +143,7 @@ export default function CompaniesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {companies.map((c) => (
+                {pageCompanies.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50">
                     <td className="px-5 py-3">
                       <Link href={`/admin/companies/${c.id}`} className="font-medium text-slate-900 hover:text-brand-600">
@@ -150,6 +163,8 @@ export default function CompaniesPage() {
               </tbody>
             </table>
           </Card>
+
+          <Pagination page={currentPage} pageSize={PAGE_SIZE} total={companies.length} onPageChange={goToPage} label="agencies" />
         </>
       )}
     </div>

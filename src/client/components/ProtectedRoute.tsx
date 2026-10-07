@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../hooks/useAuth';
 import LoadingState from './ui/LoadingState';
@@ -20,6 +20,11 @@ export default function ProtectedRoute({
 }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  // The first client render must match the server HTML ("Checking your
+  // session…"). This subtree can hydrate after AuthProvider's effect has
+  // already finished loading (e.g. no token → instant), so wait until mounted.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const allowed = roles || (role ? [role] : null);
   const redirectTo = loading ? null : !user ? '/auth/login' : allowed && !allowed.includes(user.role) ? homePathForRole(user.role) : null;
 
@@ -27,7 +32,7 @@ export default function ProtectedRoute({
     if (redirectTo) router.replace(redirectTo);
   }, [redirectTo, router]);
 
-  if (loading) return <LoadingState label="Checking your session…" />;
+  if (!mounted || loading) return <LoadingState label="Checking your session…" />;
   if (redirectTo) return <LoadingState label="Redirecting…" />;
   return <>{children}</>;
 }
