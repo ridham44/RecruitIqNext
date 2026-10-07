@@ -130,7 +130,7 @@ export default function CompaniesPage() {
 
           {/* Tablet/desktop: table */}
           {/* Scrolls inside the card (both directions) with the header kept in view */}
-          <Card id="agencies-list" className="hidden max-h-[calc(100vh-18rem)] min-h-[16rem] overflow-auto md:block">
+          <Card id="agencies-list" className="table-scroll hidden md:block">
             <table className="w-full min-w-[640px] text-sm">
               <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 shadow-[0_1px_0_0_theme(colors.slate.200)]">
                 <tr>

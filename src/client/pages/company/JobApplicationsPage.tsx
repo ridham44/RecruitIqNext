@@ -800,7 +800,7 @@ export default function JobApplicationsPage() {
           })}
         </div>
 
-        <Card className="hidden overflow-x-auto md:block">
+        <Card className="table-scroll hidden md:block">
           <table className="w-full min-w-[900px] text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>

@@ -47,6 +47,35 @@
     @apply font-semibold;
   }
 
+}
+
+@layer components {
+  /* Long tables: scroll inside their card with the header row pinned.
+     Phones keep sideways scrolling only (their pages show cards / let the
+     page scroll) — a nested vertical scroller is awkward on touch. */
+  .table-scroll {
+    @apply overflow-auto;
+  }
+  .table-scroll thead th {
+    @apply sticky top-0 z-10 bg-slate-50;
+    box-shadow: inset 0 -1px 0 theme('colors.slate.200');
+  }
+  @media (min-width: theme('screens.md')) {
+    .table-scroll {
+      max-height: max(22rem, calc(100vh - 16rem));
+    }
+  }
+
+  /* Long lists (not tables): same height cap from tablet up. */
+  @media (min-width: theme('screens.md')) {
+    .list-scroll {
+      @apply overflow-y-auto;
+      max-height: max(20rem, calc(100vh - 18rem));
+    }
+  }
+}
+
+@layer base {
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

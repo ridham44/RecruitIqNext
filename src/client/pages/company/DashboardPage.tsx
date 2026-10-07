@@ -233,7 +233,7 @@ export default function CompanyDashboardPage() {
             </span>
           </div>
 
-          <div className="mt-3 space-y-2">
+          <div className="list-scroll mt-3 space-y-2 pr-1">
             {visibleAttention.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center">
                 <CheckCircle2 className="mx-auto h-6 w-6 text-emerald-500" />

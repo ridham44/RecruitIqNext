@@ -174,7 +174,7 @@ export default function UsersPage() {
           </div>
 
           {/* Tablet/desktop: table */}
-          <Card className="hidden overflow-x-auto md:block">
+          <Card className="table-scroll hidden md:block">
             <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>

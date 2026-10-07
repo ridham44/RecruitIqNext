@@ -114,7 +114,7 @@ export default function JobsListPage() {
       )}
 
       {jobs && jobs.length > 0 && (
-        <Card className="overflow-x-auto">
+        <Card className="table-scroll">
           {/* <table className="w-full min-w-[560px] text-sm"> */}
           <table className="w-full min-w-[680px] text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">

@@ -379,7 +379,7 @@ export default function JobInterviewsPage() {
       {interviews.length === 0 ? (
         <EmptyState icon={Bot} title="No interviews yet" description="Candidates who pass the resume match and verify their email appear here with their interview." />
       ) : (
-        <Card className="divide-y divide-slate-100">
+        <Card className="list-scroll divide-y divide-slate-100">
           {interviews.map((i) => (
             <div key={i.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
