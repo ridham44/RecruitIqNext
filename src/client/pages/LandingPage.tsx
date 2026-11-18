@@ -11,6 +11,7 @@ import {
   Building2,
   ShieldCheck,
   ArrowRight,
+  Youtube,
 } from 'lucide-react';
 
 // Build plan P9: the agency-link flow — a candidate gets a private agency or
@@ -102,6 +103,12 @@ export default function LandingPage() {
           >
             <PlayCircle className="h-4 w-4" /> See the live demo
           </Link>
+          <a
+            href="#demo-video"
+            className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-lg border border-brand-200 px-6 text-sm font-semibold text-brand-700 hover:bg-brand-50"
+          >
+            <Youtube className="h-4 w-4" /> Watch the video
+          </a>
           <Link
             href="/auth/login"
             className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-slate-300 px-6 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -113,6 +120,30 @@ export default function LandingPage() {
           Agency accounts are set up by the RecruitIQ team. Looking for a job? Use the link your recruitment agency sent you —
           RecruitIQ has no public job board.
         </p>
+      </section>
+
+      {/* Product demo video — walkthrough of the whole platform */}
+      <section id="demo-video" className="mx-auto max-w-5xl scroll-mt-6 px-4 pb-14 sm:px-6 sm:pb-16">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">See RecruitIQ in action</h2>
+          <p className="mx-auto mt-2 max-w-2xl text-sm text-slate-600 sm:text-base">
+            A full walkthrough of the platform — from sharing an agency link to resume matching, AI voice interviews and
+            final reports.
+          </p>
+        </div>
+        <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-lg sm:mt-8 sm:rounded-2xl">
+          <div className="relative aspect-video w-full">
+            <iframe
+              className="absolute inset-0 h-full w-full"
+              src="https://www.youtube-nocookie.com/embed/5-YSzCSBK_Y?rel=0&modestbranding=1"
+              title="RecruitIQ product demo"
+              loading="lazy"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            />
+          </div>
+        </div>
       </section>
 
       {/* How it works */}
